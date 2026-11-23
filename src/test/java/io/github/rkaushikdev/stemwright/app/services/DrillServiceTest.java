@@ -26,6 +26,9 @@ import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
 import io.github.rkaushikdev.stemwright.domain.mastery.LadderInput;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.ortho.Hint;
+import io.github.rkaushikdev.stemwright.domain.ortho.HintLevel;
+import io.github.rkaushikdev.stemwright.domain.ortho.MatchVerdict;
 import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationRule;
 import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationTable;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
@@ -33,6 +36,7 @@ import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.support.App.Harness;
 import io.github.rkaushikdev.stemwright.support.Drill;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -304,6 +308,67 @@ class DrillServiceTest {
 
             service.answer(ask(target.id(), "nonsense"), patched);
             assertThat(built.bus().ofKind(CellSuspended.class)).hasSize(1);
+        }
+    }
+
+    @Nested
+    class Hints {
+
+        @Test
+        void climbsTheHintLadderEachTimeTheSameCellIsMissedInASitting() {
+            DrillService service = build().service();
+            Cell target = firstCell(queueOn(service, DAY));
+            List<HintLevel> rungs = new ArrayList<>();
+            for (int step = 0; step < 5; step += 1) {
+                service.answer(ask(target.id(), "zzzzzzzz"), SETTINGS)
+                        .hint()
+                        .ifPresent(hint -> rungs.add(hint.level()));
+            }
+            assertThat(rungs)
+                    .containsExactly(
+                            HintLevel.SHAPE, HintLevel.KIND, HintLevel.OPENING, HintLevel.REVEAL, HintLevel.REVEAL);
+        }
+
+        @Test
+        void startsANearMissOneRungUpAndGivesARightAnswerNoHint() {
+            DrillService service = build().service();
+            Cell target = firstCell(queueOn(service, DAY));
+            String expected = service.answer(ask(target.id(), "zzzzzzzz"), SETTINGS)
+                    .review()
+                    .expected();
+            AnswerOutcome near = service.answer(ask(target.id(), expected + "x"), SETTINGS);
+            AnswerOutcome right = service.answer(ask(target.id(), expected), SETTINGS);
+
+            assertThat(near.review().match().verdict()).isEqualTo(MatchVerdict.NEAR);
+            assertThat(near.hint().map(Hint::level)).contains(HintLevel.OPENING);
+            assertThat(right.hint()).isEmpty();
+        }
+
+        @Test
+        void startsTheLadderAgainInTheNextSitting() {
+            DrillService service = build().service();
+            Cell target = firstCell(queueOn(service, DAY));
+            service.answer(ask(target.id(), "zzzzzzzz"), SETTINGS);
+            AnswerOutcome tomorrow = service.answer(
+                    AnswerRequest.of("lrn_one", "latin", "all", target.id(), "zzzzzzzz")
+                            .withOn(DAY.plusDays(1)),
+                    SETTINGS);
+            assertThat(tomorrow.hint().map(Hint::level)).contains(HintLevel.SHAPE);
+        }
+
+        @Test
+        void passesTheHintTheLearnerSawThroughToTheSchedule() {
+            DrillService service = build().service();
+            Cell target = firstCell(queueOn(service, DAY));
+            String expected =
+                    service.answer(ask(target.id(), "x"), SETTINGS).review().expected();
+            AnswerOutcome copied = service.answer(
+                    AnswerRequest.of("lrn_one", "latin", "all", target.id(), expected, HintLevel.REVEAL)
+                            .withOn(DAY),
+                    SETTINGS);
+            assertThat(copied.review().match().isCorrect()).isTrue();
+            assertThat(copied.review().ledger().strengthFor(target.id()).correct())
+                    .isZero();
         }
     }
 

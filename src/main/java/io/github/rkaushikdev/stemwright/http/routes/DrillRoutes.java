@@ -7,6 +7,8 @@ import io.github.rkaushikdev.stemwright.domain.course.Permission;
 import io.github.rkaushikdev.stemwright.domain.drill.Queue;
 import io.github.rkaushikdev.stemwright.domain.drill.ReviewResult;
 import io.github.rkaushikdev.stemwright.domain.drill.SessionSummary;
+import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
+import io.github.rkaushikdev.stemwright.domain.ortho.HintLevel;
 import io.github.rkaushikdev.stemwright.http.Auth;
 import io.github.rkaushikdev.stemwright.http.AuthedRequest;
 import io.github.rkaushikdev.stemwright.http.HttpResponse;
@@ -65,16 +67,21 @@ public final class DrillRoutes {
     }
 
     /**
-     * The answer to the request's deck, given on the query's day when it names one and on the
-     * service's day otherwise.
+     * The answer to the request's deck, unaided, given on the query's day when it names one and on
+     * the service's day otherwise.
      */
     static AnswerRequest answerFor(AuthedRequest request, Optional<LocalDate> day, String cellId, String given) {
-        AnswerRequest asked = AnswerRequest.of(
-                request.params().get("learnerId"),
-                request.params().get("language"),
-                request.params().get("deckKey"),
-                cellId,
-                given);
+        return answerFor(request, day, cellId, given, Optional.empty());
+    }
+
+    /** {@link #answerFor(AuthedRequest, Optional, String, String)} given after the hint at that rung. */
+    static AnswerRequest answerFor(
+            AuthedRequest request, Optional<LocalDate> day, String cellId, String given, Optional<HintLevel> hinted) {
+        String learnerId = request.params().get("learnerId");
+        String language = request.params().get("language");
+        String deckKey = request.params().get("deckKey");
+        AnswerRequest asked = hinted.map(level -> AnswerRequest.of(learnerId, language, deckKey, cellId, given, level))
+                .orElseGet(() -> AnswerRequest.of(learnerId, language, deckKey, cellId, given));
         return day.map(asked::withOn).orElse(asked);
     }
 
@@ -114,7 +121,10 @@ public final class DrillRoutes {
         Optional<LocalDate> day = Query.dayFrom(request.query());
         String cellId = Codec.readString(body, "body", "cellId");
         String given = Codec.readString(body, "body", "given");
-        AnswerOutcome outcome = deps.drill().answer(answerFor(request, day, cellId, given));
+        Optional<HintLevel> hinted = Codec.readOptionalString(body, "body", "hinted")
+                .map(key -> HintLevel.fromKey(key)
+                        .orElseThrow(() -> ValidationException.field("body.hinted", "is not a hint level: " + key)));
+        AnswerOutcome outcome = deps.drill().answer(answerFor(request, day, cellId, given, hinted));
 
         ReviewResult review = outcome.review();
         return HttpResponse.json(
@@ -136,6 +146,14 @@ public final class DrillRoutes {
                                 Json.array(review.variants().stream()
                                         .<Json>map(Json::of)
                                         .toList()))
+                        .put(
+                                "hint",
+                                outcome.hint()
+                                        .<Json>map(hint -> Json.object()
+                                                .put("level", hint.level().key())
+                                                .put("text", hint.text())
+                                                .build())
+                                        .orElse(Json.NULL))
                         .build());
     }
 

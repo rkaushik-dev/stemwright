@@ -12,6 +12,7 @@ import io.github.rkaushikdev.stemwright.domain.mastery.CreditRule;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechAction;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.ortho.HintLevel;
 import io.github.rkaushikdev.stemwright.domain.ortho.MatchVerdict;
 import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationRule;
 import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationTable;
@@ -248,6 +249,71 @@ class ReviewTest {
                             .cellTolerance("exact")
                             .build());
             assertThat(result.attempt().toleranceLevel()).isEqualTo("exact");
+        }
+    }
+
+    @Nested
+    class AfterAHint {
+
+        private final Cell datSg = cellOf("case=dat;number=sg");
+
+        /** The genitive answered right a second time, the day after the first, after the hint. */
+        private ReviewResult secondAfter(HintLevel hint, MasteryLedger ledger) {
+            ReviewRequest asked = request(GEN_SG, "", TERM.plusDays(1))
+                    .given("puellae", hint)
+                    .sequence(2)
+                    .build();
+            return Review.answer(DRILL_CONTEXT, REVIEW_SETTINGS, ledger, BurialSet.NONE, asked);
+        }
+
+        private MasteryLedger answeredOnce() {
+            ReviewResult twin = ask("puellae", datSg);
+            return Review.answer(
+                            DRILL_CONTEXT,
+                            REVIEW_SETTINGS,
+                            twin.ledger(),
+                            BurialSet.NONE,
+                            request(GEN_SG, "puellae", TERM).sequence(2).build())
+                    .ledger();
+        }
+
+        @Test
+        void holdsTheRungOfARightAnswerTypedAfterTheOpeningWasShown() {
+            ReviewResult result = secondAfter(HintLevel.OPENING, answeredOnce());
+            assertThat(result.match().verdict()).isEqualTo(MatchVerdict.EXACT);
+            assertThat(result.attempt().verdict()).isEqualTo(MatchVerdict.EXACT);
+            assertThat(result.ledger().strengthFor(GEN_SG.id()).rung()).isZero();
+            assertThat(result.ledger().strengthFor(GEN_SG.id()).correct()).isEqualTo(1);
+            assertThat(result.ledger().strengthFor(GEN_SG.id()).dueOn()).contains(d("2024-10-03"));
+            assertThat(result.twinsCredited()).isZero();
+        }
+
+        @Test
+        void treatsTheRevealedFormTheSameWay() {
+            assertThat(secondAfter(HintLevel.REVEAL, answeredOnce())
+                            .ledger()
+                            .strengthFor(GEN_SG.id())
+                            .rung())
+                    .isZero();
+        }
+
+        @Test
+        void climbsAsUsualAfterAHintThatGaveNoLettersAway() {
+            for (HintLevel hint : List.of(HintLevel.SHAPE, HintLevel.KIND)) {
+                ReviewResult result = secondAfter(hint, answeredOnce());
+                assertThat(result.ledger().strengthFor(GEN_SG.id()).rung()).isEqualTo(1);
+                assertThat(result.ledger().strengthFor(GEN_SG.id()).correct()).isEqualTo(2);
+                assertThat(result.twinsCredited()).isEqualTo(1);
+            }
+        }
+
+        @Test
+        void stillLapsesAWrongAnswerAfterAHint() {
+            ReviewRequest asked = request(GEN_SG, "", TERM)
+                    .given("nonsense", HintLevel.REVEAL)
+                    .build();
+            ReviewResult result = Review.answer(DRILL_CONTEXT, REVIEW_SETTINGS, empty(), BurialSet.NONE, asked);
+            assertThat(result.ledger().strengthFor(GEN_SG.id()).lapses()).isEqualTo(1);
         }
     }
 

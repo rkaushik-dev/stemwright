@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.stemwright.domain.drill;
 
+import io.github.rkaushikdev.stemwright.domain.ortho.HintLevel;
 import io.github.rkaushikdev.stemwright.domain.ortho.ToleranceRequest;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import java.time.LocalDate;
@@ -20,6 +21,7 @@ import java.util.Optional;
  * @param cellTolerance a tolerance level fixed on the cell, which beats the deck
  * @param assignmentTolerance a tolerance level fixed on the assignment, which beats both
  * @param elapsedMs how long the learner took, in milliseconds, absent when it was not timed
+ * @param hinted the furthest rung of the hint ladder the learner was shown before answering
  */
 public record ReviewRequest(
         Cell cell,
@@ -32,7 +34,8 @@ public record ReviewRequest(
         Optional<String> deckTolerance,
         Optional<String> cellTolerance,
         Optional<String> assignmentTolerance,
-        Optional<Double> elapsedMs) {
+        Optional<Double> elapsedMs,
+        Optional<HintLevel> hinted) {
 
     public ReviewRequest {
         Objects.requireNonNull(cell, "cell");
@@ -45,9 +48,10 @@ public record ReviewRequest(
         Objects.requireNonNull(cellTolerance, "cellTolerance");
         Objects.requireNonNull(assignmentTolerance, "assignmentTolerance");
         Objects.requireNonNull(elapsedMs, "elapsedMs");
+        Objects.requireNonNull(hinted, "hinted");
     }
 
-    /** An empty builder; every part but the tolerance levels and the elapsed time must be set. */
+    /** An empty builder; every part but the tolerance levels, the elapsed time and the hint must be set. */
     public static Builder builder() {
         return new Builder();
     }
@@ -57,7 +61,10 @@ public record ReviewRequest(
         return new ToleranceRequest(deckTolerance, cellTolerance, assignmentTolerance);
     }
 
-    /** Collects the parts of a request; the tolerance levels and the elapsed time may be left out. */
+    /**
+     * Collects the parts of a request; the tolerance levels, the elapsed time and the hint may be
+     * left out.
+     */
     public static final class Builder {
 
         private Cell cell;
@@ -71,6 +78,7 @@ public record ReviewRequest(
         private String cellTolerance;
         private String assignmentTolerance;
         private Double elapsedMs;
+        private HintLevel hinted;
 
         private Builder() {}
 
@@ -81,6 +89,13 @@ public record ReviewRequest(
 
         public Builder given(String given) {
             this.given = given;
+            return this;
+        }
+
+        /** What the learner typed after being shown the hint at that rung. */
+        public Builder given(String given, HintLevel hinted) {
+            this.given = given;
+            this.hinted = hinted;
             return this;
         }
 
@@ -146,7 +161,8 @@ public record ReviewRequest(
                     Optional.ofNullable(deckTolerance),
                     Optional.ofNullable(cellTolerance),
                     Optional.ofNullable(assignmentTolerance),
-                    Optional.ofNullable(elapsedMs));
+                    Optional.ofNullable(elapsedMs),
+                    Optional.ofNullable(hinted));
         }
     }
 }

@@ -81,10 +81,11 @@ class RouteBodiesTest {
         HttpResponse right = post(handle, DECK + "/answers", answer(cellId, expected));
 
         assertThat(keysOf(right.body()))
-                .containsExactly("verdict", "expected", "miss", "twinsCredited", "sessionId", "sequence", "variants");
+                .containsExactly(
+                        "verdict", "expected", "miss", "twinsCredited", "sessionId", "sequence", "variants", "hint");
         assertThat(Json.stringify(right.body()))
                 .startsWith("{\"verdict\":\"exact\",\"expected\":\"" + expected + "\",\"miss\":null,")
-                .endsWith(",\"sequence\":2,\"variants\":[]}");
+                .endsWith(",\"sequence\":2,\"variants\":[],\"hint\":null}");
     }
 
     @Test

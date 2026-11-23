@@ -23,6 +23,7 @@ import io.github.rkaushikdev.stemwright.domain.errors.NotFoundException;
 import io.github.rkaushikdev.stemwright.domain.mastery.CellStrength;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.ortho.Hint;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import java.time.LocalDate;
 import java.util.List;
@@ -141,7 +142,8 @@ public final class DrillService {
      * Marks the answer against the revision in force on its day, at the tolerance level the deck
      * runs at, and records it: the attempt is appended, the open session grows by it, and the
      * ledger is rescheduled, in that order. The attempt is then announced, and so is a suspension
-     * when the answer left the cell suspended.
+     * when the answer left the cell suspended. A wrong answer earns the next rung of the hint
+     * ladder for the cell in this sitting.
      *
      * @throws NotFoundException for the language, its profile book or the deck, or naming the cell
      *     when the deck does not take it on the day
@@ -170,7 +172,9 @@ public final class DrillService {
                 .deckKey(request.deckKey());
         deck.toleranceLevel().ifPresent(asked::deckTolerance);
         request.elapsedMs().ifPresent(asked::elapsedMs);
+        request.hinted().ifPresent(level -> asked.given(request.given(), level));
         ReviewResult review = Review.answer(context, reviewSettings, ledger, session.buried(), asked.build());
+        Optional<Hint> hint = HintRung.forAnswer(session, cell.id(), review.match());
 
         Session grown = session.recordAttempt(review.attempt(), review.buried());
         stores.attempts().append(List.of(review.attempt()));
@@ -185,7 +189,7 @@ public final class DrillService {
                     clock.now(), request.learnerId(), request.learnerId(), cell.id(), after.lapses()));
         }
 
-        return new AnswerOutcome(review, grown);
+        return new AnswerOutcome(review, grown, hint);
     }
 
     /**

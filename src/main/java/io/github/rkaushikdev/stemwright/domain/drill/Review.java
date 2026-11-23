@@ -9,6 +9,7 @@ import io.github.rkaushikdev.stemwright.domain.mastery.CellStrength;
 import io.github.rkaushikdev.stemwright.domain.mastery.CreditReport;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.ortho.HintLevel;
 import io.github.rkaushikdev.stemwright.domain.ortho.MatchResult;
 import io.github.rkaushikdev.stemwright.domain.ortho.MatchVerdict;
 import io.github.rkaushikdev.stemwright.domain.ortho.ResolvedTolerance;
@@ -54,7 +55,8 @@ public final class Review {
     /**
      * Marks one answer against the main form and every variant the slot accepts, as typed or as read
      * through the language's transliteration table, and works out everything it changes. The attempt
-     * records the main form as the one expected. A right answer climbs the cell and
+     * records the main form as the one expected, and the verdict as marked even when a hint the
+     * learner saw keeps a right answer from climbing. A right answer climbs the cell and
      * passes credit to its twins, a near miss holds it at its rung, and a wrong one lapses it; the
      * leech policy then looks at the cell whatever the verdict. Unless the settings say otherwise,
      * the cell and its twins are buried for the rest of the sitting, again whatever the verdict.
@@ -75,10 +77,12 @@ public final class Review {
                 acceptedForms(expected), request.given(), tolerance.level(), settings.transliteration());
 
         CellStrength before = ledger.strengthFor(cell.id());
+        boolean earned = match.isCorrect()
+                && request.hinted().filter(Review::givesLettersAway).isEmpty();
         CellStrength after;
-        if (match.isCorrect()) {
+        if (earned) {
             after = before.recordCorrect(settings.ladder(), on);
-        } else if (match.verdict() == MatchVerdict.NEAR) {
+        } else if (match.isCorrect() || match.verdict() == MatchVerdict.NEAR) {
             after = before.recordNearMiss(settings.ladder(), on);
         } else {
             after = before.recordLapse(settings.ladder(), on);
@@ -93,7 +97,7 @@ public final class Review {
 
         List<String> twins = BurialSet.twinCellsOf(context, cell, on);
         int twinsCredited = 0;
-        if (match.isCorrect() && !twins.isEmpty()) {
+        if (earned && !twins.isEmpty()) {
             CreditReport credited = settings.credit().propagate(next, settings.ladder(), twins, on);
             next = credited.ledger();
             twinsCredited = credited.movedCount();
@@ -125,6 +129,16 @@ public final class Review {
                 twinsCredited,
                 leech.outcome().fired(),
                 expected.variants());
+    }
+
+    /**
+     * True for a rung that shows some of the answer's letters. A right answer typed after one of
+     * those is the learner copying rather than recalling, so it is scheduled as a near miss: the
+     * cell holds its rung, comes back soon, and passes nothing to its twins. A shape or the kind of
+     * miss gives no letters away, and an answer after either is recalled all the same.
+     */
+    private static boolean givesLettersAway(HintLevel level) {
+        return level.compareTo(HintLevel.OPENING) >= 0;
     }
 
     /** The main form first, so an answer that matches it and a variant equally is marked on it. */

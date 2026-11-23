@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.stemwright.http.routes;
 
 import static io.github.rkaushikdev.stemwright.support.Http.DIRECTORY;
+import static io.github.rkaushikdev.stemwright.support.Http.at;
 import static io.github.rkaushikdev.stemwright.support.Http.httpHarness;
 import static io.github.rkaushikdev.stemwright.support.Http.itemsAt;
 import static io.github.rkaushikdev.stemwright.support.Http.makeRequest;
@@ -148,6 +149,59 @@ class DrillRoutesTest {
             assertThat(itemsAt(response.body(), "variants")).containsExactly(Json.of("puellai"));
             assertThat(itemsAt(answer(build(), genitive, "puellai").body(), "variants"))
                     .isEmpty();
+        }
+
+        @Test
+        void givesAWrongAnswerTheNextHintAndARightOneNone() {
+            Router handle = build();
+            String cellId = firstCellId(handle);
+            HttpResponse first = answer(handle, cellId, "zzzzzzzz");
+            HttpResponse second = answer(handle, cellId, "zzzzzzzz");
+            HttpResponse right = answer(handle, cellId, textAt(first.body(), "expected"));
+
+            assertThat(textAt(first.body(), "hint.level")).isEqualTo("shape");
+            assertThat(textAt(first.body(), "hint.text"))
+                    .endsWith(".".repeat(textAt(first.body(), "expected").length()));
+            assertThat(textAt(second.body(), "hint.level")).isEqualTo("kind");
+            assertThat(at(right.body(), "hint")).isEqualTo(Json.NULL);
+        }
+
+        @Test
+        void readsTheHintTheLearnerSawFromTheBody() {
+            Router handle = build();
+            String cellId = firstCellId(handle);
+            String expected = textAt(answer(handle, cellId, "x").body(), "expected");
+            HttpResponse response = handle.handle(makeRequest(
+                    Method.POST,
+                    ANSWER,
+                    token("tok-student")
+                            .withQuery(COURSE)
+                            .withBody(Json.object()
+                                    .put("cellId", cellId)
+                                    .put("given", expected)
+                                    .put("hinted", "reveal")
+                                    .build())));
+            assertThat(textAt(response.body(), "verdict")).isEqualTo("exact");
+        }
+
+        @Test
+        void refusesAHintLevelNobodyDeclared() {
+            Router handle = build();
+            HttpRequest request = makeRequest(
+                    Method.POST,
+                    ANSWER,
+                    token("tok-student")
+                            .withQuery(COURSE)
+                            .withBody(Json.object()
+                                    .put("cellId", firstCellId(handle))
+                                    .put("given", "x")
+                                    .put("hinted", "everything")
+                                    .build()));
+            assertThatThrownBy(() -> handle.handle(request))
+                    .isInstanceOf(ValidationException.class)
+                    .satisfies(error -> assertThat(((ValidationException) error).details())
+                            .extracting(detail -> detail.path() + " " + detail.message())
+                            .containsExactly("body.hinted is not a hint level: everything"));
         }
 
         @Test
