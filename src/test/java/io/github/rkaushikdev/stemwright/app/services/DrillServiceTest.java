@@ -29,6 +29,7 @@ import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.support.App.Harness;
 import java.time.LocalDate;
+import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -193,6 +194,85 @@ class DrillServiceTest {
             assertThat(built.bus().ofKind(CellSuspended.class)).hasSize(1);
             MasteryLedger ledger = built.stores().ledgers().get("lrn_one").orElseThrow();
             assertThat(ledger.strengthFor(target.id()).suspended()).isTrue();
+        }
+    }
+
+    @Nested
+    class UnderThePolicy {
+
+        @Test
+        void marksAtTheToleranceLevelTheDeckRunsAt() {
+            Built built = build();
+            built.stores()
+                    .decks()
+                    .put(Deck.of(
+                            LATIN_NOUN,
+                            DeckInput.builder("strict").toleranceLevel("exact").build()));
+            DrillService service = built.service();
+            Cell target = firstCell(queueOn(service, DAY));
+            String expected =
+                    service.answer(ask(target.id(), "x"), SETTINGS).review().expected();
+            String shouted = expected.toUpperCase(Locale.ROOT);
+
+            AnswerOutcome lenient = service.answer(ask(target.id(), shouted), SETTINGS);
+            AnswerOutcome strict = service.answer(
+                    AnswerRequest.of("lrn_one", "latin", "strict", target.id(), shouted)
+                            .withOn(DAY),
+                    SETTINGS);
+
+            assertThat(lenient.review().attempt().toleranceLevel()).isEqualTo("standard");
+            assertThat(lenient.review().match().isCorrect()).isTrue();
+            assertThat(strict.review().attempt().toleranceLevel()).isEqualTo("exact");
+            assertThat(strict.review().match().isCorrect()).isFalse();
+        }
+
+        @Test
+        void leavesTheTwinsInTheQueueWhenThePolicySaysNotToBury() {
+            DrillSettings keepTwins = DrillSettings.builder()
+                    .policy(DrillPolicyPatch.builder()
+                            .newPerDay(3)
+                            .perLexemeCap(10)
+                            .rowSpacing(0)
+                            .buryTwins(false)
+                            .build())
+                    .ladder(FLAT)
+                    .build();
+            DrillService service = build().service();
+            Cell target = firstCell(service.queue("lrn_one", "latin", "all", DAY, keepTwins));
+
+            AnswerOutcome outcome = service.answer(ask(target.id(), "x"), keepTwins);
+
+            assertThat(outcome.session().buried().size()).isZero();
+            assertThat(service.answer(ask(target.id(), "x"), SETTINGS)
+                            .session()
+                            .buried()
+                            .isBuried(target.id()))
+                    .isTrue();
+        }
+
+        @Test
+        void suspendsAtTheThresholdThePolicyPatchNames() {
+            DrillSettings patched = DrillSettings.builder()
+                    .policy(DrillPolicyPatch.builder()
+                            .newPerDay(3)
+                            .perLexemeCap(10)
+                            .rowSpacing(0)
+                            .leechThreshold(4)
+                            .build())
+                    .ladder(FLAT)
+                    .leech(LeechPolicy.builder().threshold(2).build())
+                    .build();
+            Built built = build();
+            DrillService service = built.service();
+            Cell target = firstCell(queueOn(service, DAY));
+
+            for (int step = 0; step < 3; step += 1) {
+                service.answer(ask(target.id(), "nonsense"), patched);
+            }
+            assertThat(built.bus().ofKind(CellSuspended.class)).isEmpty();
+
+            service.answer(ask(target.id(), "nonsense"), patched);
+            assertThat(built.bus().ofKind(CellSuspended.class)).hasSize(1);
         }
     }
 

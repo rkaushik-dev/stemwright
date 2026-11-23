@@ -21,6 +21,7 @@ import io.github.rkaushikdev.stemwright.domain.drill.ReviewSettings;
 import io.github.rkaushikdev.stemwright.domain.drill.Session;
 import io.github.rkaushikdev.stemwright.domain.errors.NotFoundException;
 import io.github.rkaushikdev.stemwright.domain.mastery.CellStrength;
+import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import java.time.LocalDate;
@@ -137,9 +138,10 @@ public final class DrillService {
     }
 
     /**
-     * Marks the answer against the revision in force on its day and records it: the attempt is
-     * appended, the open session grows by it, and the ledger is rescheduled, in that order. The
-     * attempt is then announced, and so is a suspension when the answer left the cell suspended.
+     * Marks the answer against the revision in force on its day, at the tolerance level the deck
+     * runs at, and records it: the attempt is appended, the open session grows by it, and the
+     * ledger is rescheduled, in that order. The attempt is then announced, and so is a suspension
+     * when the answer left the cell suspended.
      *
      * @throws NotFoundException for the language, its profile book or the deck, or naming the cell
      *     when the deck does not take it on the day
@@ -147,7 +149,8 @@ public final class DrillService {
     public AnswerOutcome answer(AnswerRequest request, DrillSettings settings) {
         LocalDate day = request.on().orElseGet(clock::today);
         DrillContext context = context(request.language());
-        Membership membership = membership(request.language(), request.deckKey(), day);
+        Deck deck = deck(request.language(), request.deckKey());
+        Membership membership = Membership.resolve(context, deck, day);
         Cell cell = membership.cells().stream()
                 .filter(entry -> entry.id().equals(request.cellId()))
                 .findFirst()
@@ -165,6 +168,7 @@ public final class DrillService {
                 .sessionId(session.id())
                 .sequence(session.nextSequence())
                 .deckKey(request.deckKey());
+        deck.toleranceLevel().ifPresent(asked::deckTolerance);
         request.elapsedMs().ifPresent(asked::elapsedMs);
         ReviewResult review = Review.answer(context, reviewSettings, ledger, session.buried(), asked.build());
 
@@ -214,12 +218,29 @@ public final class DrillService {
     }
 
     /**
-     * The language's marking with the caller's ladder and leech policy. The credit rule and twin
-     * burial are left at their defaults; the drill policy's {@code buryTwins} is not consulted here.
+     * The language's marking with the caller's ladder and leech policy, under the drill policy the
+     * settings patch: the policy's {@code buryTwins} decides whether an answer buries the cell and
+     * its twins, and a patch that names a leech threshold moves the leech policy to it while keeping
+     * what the leech policy does to a leech. The credit rule is left at its default.
      */
     private ReviewSettings settingsFor(String language, DrillSettings settings) {
         LanguageBundle bundle = Loaders.requireLanguage(stores, language);
-        return ReviewSettings.of(bundle.ortho(), bundle.rules(), settings.ladder(), settings.leech());
+        DrillPolicy policy = policyOf(settings);
+        LeechPolicy leech = settings.policy()
+                .leechThreshold()
+                .map(threshold -> withThreshold(settings.leech(), threshold))
+                .orElse(settings.leech());
+        return ReviewSettings.of(bundle.ortho(), bundle.rules(), settings.ladder(), leech)
+                .withBuryTwins(policy.buryTwins());
+    }
+
+    private static LeechPolicy withThreshold(LeechPolicy leech, int threshold) {
+        return LeechPolicy.builder()
+                .threshold(threshold)
+                .action(leech.action())
+                .consecutiveOnly(leech.consecutiveOnly())
+                .demotionRest(leech.demotionRest())
+                .build();
     }
 
     /**

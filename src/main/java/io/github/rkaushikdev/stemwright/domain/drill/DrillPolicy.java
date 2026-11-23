@@ -60,7 +60,8 @@ public record DrillPolicy(
      * wrong beside a {@code newPerDay} of four.
      *
      * @throws io.github.rkaushikdev.stemwright.domain.errors.ValidationException listing every count
-     *     out of range and every unusable rest day, or naming a ladder key that is not a slug
+     *     out of range, a leech threshold of nought among them, and every unusable rest day, or
+     *     naming a ladder key that is not a slug
      */
     public DrillPolicy applyPatch(DrillPolicyPatch patch) {
         ProblemCollector problems = new ProblemCollector();
@@ -76,11 +77,12 @@ public record DrillPolicy(
                         .orElse(ladderKey),
                 patch.restDays().orElse(restDays).stream().distinct().sorted().toList());
 
-        checkCount(problems, "newPerDay", merged.newPerDay, MAX_NEW_PER_DAY);
-        checkCount(problems, "reviewsPerDay", merged.reviewsPerDay, MAX_REVIEWS_PER_DAY);
-        checkCount(problems, "perLexemeCap", merged.perLexemeCap, MAX_PER_LEXEME_CAP);
-        checkCount(problems, "rowSpacing", merged.rowSpacing, MAX_ROW_SPACING);
-        checkCount(problems, "leechThreshold", merged.leechThreshold, MAX_LEECH_THRESHOLD);
+        checkCount(problems, "newPerDay", merged.newPerDay, 0, MAX_NEW_PER_DAY);
+        checkCount(problems, "reviewsPerDay", merged.reviewsPerDay, 0, MAX_REVIEWS_PER_DAY);
+        checkCount(problems, "perLexemeCap", merged.perLexemeCap, 0, MAX_PER_LEXEME_CAP);
+        checkCount(problems, "rowSpacing", merged.rowSpacing, 0, MAX_ROW_SPACING);
+        // A threshold of nought would make a leech of every cell before it was ever answered.
+        checkCount(problems, "leechThreshold", merged.leechThreshold, 1, MAX_LEECH_THRESHOLD);
 
         for (int day : merged.restDays) {
             if (day < 1 || day > DAYS_IN_WEEK) {
@@ -98,9 +100,9 @@ public record DrillPolicy(
         return merged;
     }
 
-    private static void checkCount(ProblemCollector problems, String path, int value, int max) {
-        if (value < 0) {
-            problems.add(path, "must not be negative: " + value);
+    private static void checkCount(ProblemCollector problems, String path, int value, int min, int max) {
+        if (value < min) {
+            problems.add(path, min == 0 ? "must not be negative: " + value : "must be at least " + min + ": " + value);
             return;
         }
         if (value > max) {

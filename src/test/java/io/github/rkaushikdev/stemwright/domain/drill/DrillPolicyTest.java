@@ -106,6 +106,15 @@ class DrillPolicyTest {
         }
 
         @Test
+        void refusesALeechThresholdOfNoughtThatWouldCatchEveryCell() {
+            assertThat(problemMessages(
+                            () -> DrillPolicy.of(patch().leechThreshold(0).build())))
+                    .containsExactly("leechThreshold must be at least 1: 0");
+            assertThat(DrillPolicy.of(patch().leechThreshold(1).build()).leechThreshold())
+                    .isEqualTo(1);
+        }
+
+        @Test
         void refusesACountOverTheCeiling() {
             assertThat(problemMessages(
                             () -> DrillPolicy.of(patch().reviewsPerDay(5000).build())))
