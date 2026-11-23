@@ -84,14 +84,24 @@ public record MatchResult(
      * form.
      */
     public static MatchResult compareAgainstAny(List<String> expectedForms, String given, ToleranceLevel level) {
+        return compareAgainstAny(expectedForms, given, level, TransliterationTable.NONE);
+    }
+
+    /**
+     * {@link #compareAgainstAny(List, String, ToleranceLevel)} with each form marked as {@link
+     * #compareForm(String, String, ToleranceLevel, TransliterationTable)} marks it, so an answer
+     * typed through the table can match any of the forms.
+     */
+    public static MatchResult compareAgainstAny(
+            List<String> expectedForms, String given, ToleranceLevel level, TransliterationTable table) {
         MatchResult best = null;
         for (String expected : expectedForms) {
-            MatchResult result = compareForm(expected, given, level);
+            MatchResult result = compareForm(expected, given, level, table);
             if (best == null || isBetter(result, best)) {
                 best = result;
             }
         }
-        return best != null ? best : compareForm("", given, level);
+        return best != null ? best : compareForm("", given, level, table);
     }
 
     /**

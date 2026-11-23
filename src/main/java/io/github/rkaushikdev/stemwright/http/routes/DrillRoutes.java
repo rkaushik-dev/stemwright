@@ -131,6 +131,11 @@ public final class DrillRoutes {
                         .put("twinsCredited", review.twinsCredited())
                         .put("sessionId", outcome.session().id())
                         .put("sequence", review.attempt().sequence())
+                        .put(
+                                "variants",
+                                Json.array(review.variants().stream()
+                                        .<Json>map(Json::of)
+                                        .toList()))
                         .build());
     }
 

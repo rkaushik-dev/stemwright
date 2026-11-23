@@ -17,6 +17,7 @@ import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationRule;
 import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationTable;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
+import io.github.rkaushikdev.stemwright.support.Book;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Nested;
@@ -112,6 +113,49 @@ class ReviewTest {
         void readsNothingThroughTheTableByDefault() {
             assertThat(REVIEW_SETTINGS.transliteration()).isEqualTo(TransliterationTable.NONE);
             assertThat(ask("puellq").match().isCorrect()).isFalse();
+        }
+    }
+
+    @Nested
+    class VariantForms {
+
+        private static final DrillContext WITH_OLD_GENITIVE = new DrillContext(
+                DRILL_CONTEXT.schema(),
+                DRILL_CONTEXT.classes(),
+                Book.LATIN_BOOK_WITH_OLD_GENITIVE,
+                DRILL_CONTEXT.lexicon());
+
+        private static ReviewResult askWithVariant(String given) {
+            return Review.answer(
+                    WITH_OLD_GENITIVE,
+                    REVIEW_SETTINGS,
+                    empty(),
+                    BurialSet.NONE,
+                    request(GEN_SG, given, TERM).build());
+        }
+
+        @Test
+        void acceptsAVariantTheSlotAllowsAsExact() {
+            ReviewResult result = askWithVariant("puellai");
+            assertThat(result.match().verdict()).isEqualTo(MatchVerdict.EXACT);
+            assertThat(result.match().expected()).isEqualTo("puellai");
+            assertThat(result.expected()).isEqualTo("puellae");
+            assertThat(result.attempt().expected()).isEqualTo("puellae");
+            assertThat(result.variants()).containsExactly("puellai");
+        }
+
+        @Test
+        void stillAcceptsTheMainFormAndRefusesTheVariantWhereNoSlotAllowsIt() {
+            assertThat(askWithVariant("puellae").match().expected()).isEqualTo("puellae");
+            assertThat(ask("puellai").match().isCorrect()).isFalse();
+            assertThat(ask("puellai").variants()).isEmpty();
+        }
+
+        @Test
+        void carriesTheVariantsOnTheExpectedForm() {
+            assertThat(Review.expectedFormFor(WITH_OLD_GENITIVE, REVIEW_SETTINGS, GEN_SG, TERM)
+                            .variants())
+                    .containsExactly("puellai");
         }
     }
 

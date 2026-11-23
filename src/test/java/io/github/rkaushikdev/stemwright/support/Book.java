@@ -4,6 +4,7 @@ import static io.github.rkaushikdev.stemwright.support.Profiles.FIRST_DECLENSION
 import static io.github.rkaushikdev.stemwright.support.Profiles.LATIN_NOUN;
 import static io.github.rkaushikdev.stemwright.support.Profiles.SECOND_NEUTER;
 
+import io.github.rkaushikdev.stemwright.domain.paradigm.ParadigmSlotInput;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBook;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBookInput;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileRevisionInput;
@@ -53,6 +54,24 @@ public final class Book {
     public static final ProfileBook LATIN_BOOK = ProfileBook.of(new ProfileBookInput(
             "latin",
             List.of(FIRST_HISTORY, NEUTER_HISTORY),
+            TestMaps.ordered("first-declension", "first-declension", "second-declension", "second-neuter")));
+
+    /**
+     * {@link #LATIN_BOOK} with the first declension also accepting the old genitive in {@code ai}
+     * beside {@code ae}, as Virgil still writes it, and the same syncretisms.
+     */
+    public static final ProfileBook LATIN_BOOK_WITH_OLD_GENITIVE = ProfileBook.of(new ProfileBookInput(
+            "latin",
+            List.of(
+                    RevisionHistory.of(
+                            "first-declension",
+                            List.of(ProfileRevisionInput.of(
+                                            day("2024-09-01"),
+                                            FIRST_DECLENSION.withSlot(
+                                                    LATIN_NOUN, ParadigmSlotInput.of("gen.sg", "ae", "ai")))
+                                    .withSyncretism(
+                                            FIRST_HISTORY.revisions().getFirst().syncretism()))),
+                    NEUTER_HISTORY),
             TestMaps.ordered("first-declension", "first-declension", "second-declension", "second-neuter")));
 
     private static LocalDate day(String value) {

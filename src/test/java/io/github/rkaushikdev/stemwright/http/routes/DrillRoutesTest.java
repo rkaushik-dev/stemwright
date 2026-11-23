@@ -12,11 +12,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.rkaushikdev.stemwright.domain.errors.ForbiddenException;
 import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
+import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.http.HttpRequest;
 import io.github.rkaushikdev.stemwright.http.HttpResponse;
 import io.github.rkaushikdev.stemwright.http.Method;
 import io.github.rkaushikdev.stemwright.http.Router;
 import io.github.rkaushikdev.stemwright.infra.json.Json;
+import io.github.rkaushikdev.stemwright.support.Book;
+import io.github.rkaushikdev.stemwright.support.Drill;
 import io.github.rkaushikdev.stemwright.support.Http;
 import java.util.Map;
 import org.junit.jupiter.api.Nested;
@@ -128,6 +131,23 @@ class DrillRoutesTest {
             String expected = textAt(first.body(), "expected");
             HttpResponse second = answer(handle, cellId, expected);
             assertThat(textAt(second.body(), "verdict")).isEqualTo("exact");
+        }
+
+        @Test
+        void acceptsAVariantFormAndListsTheVariantsTheCellAllows() {
+            Http.Harness harness = httpHarness();
+            harness.stores().books().put(Book.LATIN_BOOK_WITH_OLD_GENITIVE);
+            Router handle =
+                    Router.of(DrillRoutes.routes(new DrillRouteDeps(DIRECTORY, harness.drill(), harness.scopeOf())));
+            String genitive = Cell.idFor(Drill.PUELLA.id(), "case=gen;number=sg");
+
+            HttpResponse response = answer(handle, genitive, "puellai");
+
+            assertThat(textAt(response.body(), "verdict")).isEqualTo("exact");
+            assertThat(textAt(response.body(), "expected")).isEqualTo("puellae");
+            assertThat(itemsAt(response.body(), "variants")).containsExactly(Json.of("puellai"));
+            assertThat(itemsAt(answer(build(), genitive, "puellai").body(), "variants"))
+                    .isEmpty();
         }
 
         @Test

@@ -214,6 +214,13 @@ class MatchResultTest {
         }
 
         @Test
+        void matchesATransliteratedAnswerAgainstAnyOfTheForms() {
+            MatchResult result = compareAgainstAny(List.of("λόγου", "λόγοιο"), "logoio", LENIENT, BETA);
+            assertThat(result.verdict()).isEqualTo(MatchVerdict.TOLERATED);
+            assertThat(result.expected()).isEqualTo("λόγοιο");
+        }
+
+        @Test
         void changesNothingUnderATableWithNoRules() {
             assertThat(compareForm("ἄνθρωπος", "anthrwpos", LENIENT, TransliterationTable.NONE))
                     .isEqualTo(compareForm("ἄνθρωπος", "anthrwpos", LENIENT));
