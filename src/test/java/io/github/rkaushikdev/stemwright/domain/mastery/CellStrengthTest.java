@@ -167,6 +167,24 @@ class CellStrengthTest {
     }
 
     @Nested
+    class OverdueShare {
+
+        @Test
+        void measuresLatenessInIntervalsRatherThanDays() {
+            CellStrength first = CellStrength.fresh("c").recordCorrect(FLAT, DAY);
+            assertThat(first.overdueShare(d("2025-03-04"))).isZero();
+            assertThat(first.overdueShare(d("2025-03-06"))).isEqualTo(2.0);
+            CellStrength second = first.recordCorrect(FLAT, d("2025-03-04"));
+            assertThat(second.overdueShare(d("2025-03-10"))).isEqualTo(1.0);
+        }
+
+        @Test
+        void isNoughtForACellNobodyHasAnswered() {
+            assertThat(CellStrength.fresh("c").overdueShare(DAY)).isZero();
+        }
+    }
+
+    @Nested
     class LapseRun {
 
         @Test

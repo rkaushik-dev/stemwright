@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -117,10 +118,35 @@ class MasteryLedgerTest {
         }
 
         @Test
-        void sortsTheMostOverdueFirst() {
+        void sortsTheMostOverdueFirstAmongCellsOnTheSameInterval() {
             MasteryLedger mixed =
                     LEDGER.withStrength(CellStrength.fresh("cell_d").recordCorrect(FLAT, d("2025-03-01")));
             assertThat(idsOf(mixed.dueCells(CELLS, d("2025-03-05")))).containsExactly("cell_d", "cell_a");
+        }
+
+        @Test
+        void putsACellFurtherPastItsOwnIntervalAheadOfOneMoreDaysLate() {
+            CellStrength shortInterval = CellStrength.fresh("cell_short").recordCorrect(FLAT, d("2025-03-10"));
+            CellStrength longInterval = new CellStrength(
+                    "cell_long", 3, Optional.of(d("2025-03-01")), 4, 4, 0, 4, 0, Optional.of(d("2025-02-13")), false);
+            MasteryLedger both = MasteryLedger.of("lrn_one", List.of(longInterval, shortInterval));
+            LocalDate on = d("2025-03-13");
+
+            assertThat(longInterval.daysOverdue(on)).isGreaterThan(shortInterval.daysOverdue(on));
+            assertThat(shortInterval.overdueShare(on)).isGreaterThan(longInterval.overdueShare(on));
+            assertThat(idsOf(both.dueCells(List.of("cell_long", "cell_short"), on)))
+                    .containsExactly("cell_short", "cell_long");
+        }
+
+        @Test
+        void fallsBackToTheDaysOverdueAndThenTheIdOnAnEqualShare() {
+            MasteryLedger twins = MasteryLedger.of(
+                    "lrn_one",
+                    List.of(
+                            CellStrength.fresh("cell_y").recordCorrect(FLAT, d("2025-03-01")),
+                            CellStrength.fresh("cell_x").recordCorrect(FLAT, d("2025-03-01"))));
+            assertThat(idsOf(twins.dueCells(List.of("cell_y", "cell_x"), d("2025-03-04"))))
+                    .containsExactly("cell_x", "cell_y");
         }
 
         @Test

@@ -71,6 +71,18 @@ public record CellStrength(
         return dueOn.map(due -> Math.max(0, CivilDates.daysBetween(due, on))).orElse(0);
     }
 
+    /**
+     * How many of its own intervals the cell is past due on the day: the days overdue over the days
+     * between its last sighting and its due date. Nought for a cell that is not overdue, and a cell
+     * whose due date was never set from a sighting counts its interval as one day.
+     */
+    double overdueShare(LocalDate on) {
+        int interval = lastSeenOn
+                .flatMap(seen -> dueOn.map(due -> CivilDates.daysBetween(seen, due)))
+                .orElse(1);
+        return (double) daysOverdue(on) / Math.max(1, interval);
+    }
+
     /** The share of sightings that were right, zero for a cell nobody has answered. */
     public double accuracy() {
         return seen == 0 ? 0 : (double) correct / seen;

@@ -80,16 +80,24 @@ public record MasteryLedger(String learnerId, Map<String, CellStrength> byCell) 
     }
 
     /**
-     * Due cells among the ones asked about, most overdue first. The candidate list comes from the
-     * caller because what is due depends on which deck is being drilled, not on everything the
-     * learner has ever seen.
+     * Due cells among the ones asked about, the furthest past their own interval first. The
+     * candidate list comes from the caller because what is due depends on which deck is being
+     * drilled, not on everything the learner has ever seen.
+     *
+     * <p>Lateness is measured against the interval the cell was waiting out rather than in days. A
+     * cell on a one day interval that is two days late is twice its interval behind and close to
+     * being forgotten; one on a hundred day interval that is three days late has barely moved, and
+     * a queue ordered by days alone would ask it first. Equal shares fall back to the days overdue,
+     * then to the cell id.
      */
     public List<CellStrength> dueCells(List<String> cellIds, LocalDate on) {
-        Comparator<CellStrength> mostOverdueFirst = Comparator.comparingInt(
-                        (CellStrength strength) -> strength.daysOverdue(on))
+        Comparator<CellStrength> furthestBehindFirst = Comparator.comparingDouble(
+                        (CellStrength strength) -> strength.overdueShare(on))
                 .reversed()
+                .thenComparing(Comparator.comparingInt((CellStrength strength) -> strength.daysOverdue(on))
+                        .reversed())
                 .thenComparing(BY_CELL);
-        return strengthsOf(cellIds, strength -> strength.isDue(on), mostOverdueFirst);
+        return strengthsOf(cellIds, strength -> strength.isDue(on), furthestBehindFirst);
     }
 
     public List<CellStrength> newCells(List<String> cellIds) {

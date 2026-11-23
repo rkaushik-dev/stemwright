@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -94,13 +95,32 @@ class QueueTest {
         }
 
         @Test
-        void sortsReviewsWithTheMostOverdueFirst() {
+        void sortsReviewsOnTheSameIntervalWithTheMostOverdueFirst() {
             MasteryLedger ledger = ledgerOf(
                     seenOn(cellOf("case=gen;number=sg").id(), "2024-09-28"),
                     seenOn(cellOf("case=dat;number=sg").id(), "2024-09-10"));
             Queue queue = assemble(policy(patch().newPerDay(0).perLexemeCap(10).rowSpacing(0)), ledger);
             assertThat(bundlesOf(queue.cells())).containsExactly("case=dat;number=sg", "case=gen;number=sg");
             assertThat(queue.entries().get(0).overdueDays()).isEqualTo(20);
+        }
+
+        @Test
+        void spendsTheReviewBudgetOnTheCellFurthestPastItsOwnInterval() {
+            String shortId = cellOf("case=gen;number=sg").id();
+            String longId = cellOf("case=dat;number=sg").id();
+            CellStrength shortInterval = seenOn(shortId, "2024-09-28");
+            CellStrength longInterval = new CellStrength(
+                    longId, 3, Optional.of(d("2024-09-20")), 4, 4, 0, 4, 0, Optional.of(d("2024-09-04")), false);
+            Queue queue = assemble(
+                    policy(patch().newPerDay(0)
+                            .reviewsPerDay(1)
+                            .perLexemeCap(10)
+                            .rowSpacing(0)),
+                    ledgerOf(longInterval, shortInterval));
+
+            assertThat(queue.cells()).extracting(Cell::id).containsExactly(shortId);
+            assertThat(queue.entries().getFirst().overdueDays()).isEqualTo(2);
+            assertThat(queue.whyExcluded(longId)).contains(ExclusionReason.REVIEW_BUDGET);
         }
 
         @Test

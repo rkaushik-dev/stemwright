@@ -45,10 +45,11 @@ public record Queue(LocalDate on, String deckKey, List<QueueEntry> entries, Map<
     }
 
     /**
-     * Reviews are placed before new cells, and within reviews the most overdue go first. New cells
-     * are only introduced once the review budget has had its chance, which is the whole point of
-     * having two budgets: a learner who has fallen behind should not be handed more to fall behind
-     * on.
+     * Reviews are placed before new cells, and within reviews the ones furthest past their own
+     * interval go first, as {@link MasteryLedger#dueCells} orders them, so a short review budget is
+     * spent on the cells closest to being forgotten. New cells are only introduced once the review
+     * budget has had its chance, which is the whole point of having two budgets: a learner who has
+     * fallen behind should not be handed more to fall behind on.
      *
      * <p>Every cell of the membership ends up either asked or excluded with one reason. On a rest
      * day every cell is excluded as such and nothing is asked.
