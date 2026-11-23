@@ -14,6 +14,7 @@ import io.github.rkaushikdev.stemwright.app.Stores;
 import io.github.rkaushikdev.stemwright.domain.errors.ForbiddenException;
 import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
 import io.github.rkaushikdev.stemwright.domain.mastery.Attempt;
+import io.github.rkaushikdev.stemwright.domain.ortho.HintLevel;
 import io.github.rkaushikdev.stemwright.http.HttpRequest;
 import io.github.rkaushikdev.stemwright.http.HttpResponse;
 import io.github.rkaushikdev.stemwright.http.Method;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -78,7 +80,7 @@ class BulkRoutesTest {
         @Test
         void readsAListOfAnswers() {
             assertThat(BulkRoutes.readBatch(answers(List.of(row("cell_a", "x")))))
-                    .containsExactly(new BulkAnswer("cell_a", "x"));
+                    .containsExactly(new BulkAnswer("cell_a", "x", Optional.empty()));
         }
 
         @Test
@@ -99,6 +101,33 @@ class BulkRoutesTest {
         void refusesAListOverTheCap() {
             List<JsonObject> many = Collections.nCopies(BulkRoutes.MAX_BATCH + 1, row("a", "b"));
             assertThatThrownBy(() -> BulkRoutes.readBatch(answers(many))).hasMessageContaining("at most 100 answers");
+        }
+
+        @Test
+        void readsTheHintARowSaysTheLearnerSaw() {
+            JsonObject hinted = Json.object()
+                    .put("cellId", "cell_a")
+                    .put("given", "x")
+                    .put("hinted", "opening")
+                    .build();
+            assertThat(BulkRoutes.readBatch(answers(List.of(row("cell_b", "y"), hinted))))
+                    .containsExactly(
+                            new BulkAnswer("cell_b", "y", Optional.empty()),
+                            new BulkAnswer("cell_a", "x", Optional.of(HintLevel.OPENING)));
+        }
+
+        @Test
+        void refusesAHintNoRungIsCalledAndNamesItsRow() {
+            JsonObject wrong = Json.object()
+                    .put("cellId", "cell_a")
+                    .put("given", "x")
+                    .put("hinted", "all")
+                    .build();
+            assertThatThrownBy(() -> BulkRoutes.readBatch(answers(List.of(row("cell_b", "y"), wrong))))
+                    .isInstanceOf(ValidationException.class)
+                    .satisfies(error -> assertThat(((ValidationException) error).details())
+                            .extracting(detail -> detail.path() + " " + detail.message())
+                            .containsExactly("body.answers.1.hinted is not a hint level: all"));
         }
 
         @Test
@@ -148,6 +177,39 @@ class BulkRoutesTest {
             HttpResponse response = post(handle, List.of(row(ids.get(0), "nonsense")));
             assertThat(textAt(response.body(), "results.0.verdict")).isEqualTo("wrong");
             assertThat(textAt(response.body(), "results.0.expected")).isNotEmpty();
+        }
+
+        @Test
+        void givesEachAcceptedAnswerTheMissAndTheHintASingleAnswerWouldGet() {
+            Router handle = build().handle();
+            String cellId = cellIds(handle, 1).getFirst();
+            HttpResponse response = post(handle, List.of(row(cellId, "zzzzzzzz"), row(cellId, "zzzzzzzz")));
+            assertThat(textAt(response.body(), "results.0.miss")).isNotEmpty();
+            assertThat(textAt(response.body(), "results.0.hint.level")).isEqualTo("shape");
+            assertThat(textAt(response.body(), "results.1.hint.level")).isEqualTo("kind");
+            assertThat(numberAt(response.body(), "results.1.sequence")).isEqualTo(2);
+        }
+
+        @Test
+        void holdsTheRungOfARightAnswerTheBatchSaysWasCopied() {
+            Built harness = build();
+            Router handle = harness.handle();
+            String cellId = cellIds(handle, 1).getFirst();
+            String expected = textAt(post(handle, List.of(row(cellId, "x"))).body(), "results.0.expected");
+            JsonObject copied = Json.object()
+                    .put("cellId", cellId)
+                    .put("given", expected)
+                    .put("hinted", "reveal")
+                    .build();
+            HttpResponse response = post(handle, List.of(copied));
+            assertThat(textAt(response.body(), "results.0.verdict")).isEqualTo("exact");
+            assertThat(harness.stores()
+                            .ledgers()
+                            .get("lrn_one")
+                            .orElseThrow()
+                            .strengthFor(cellId)
+                            .correct())
+                    .isZero();
         }
 
         @Test

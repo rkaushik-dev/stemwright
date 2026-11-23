@@ -116,7 +116,18 @@ class RouteBodiesTest {
                         .build());
 
         assertThat(keysOf(response.body())).containsExactly("accepted", "refused", "results");
-        assertThat(keysOf(at(response.body(), "results.0"))).containsExactly("cellId", "ok", "verdict", "expected");
+        assertThat(keysOf(at(response.body(), "results.0")))
+                .containsExactly(
+                        "cellId",
+                        "ok",
+                        "verdict",
+                        "expected",
+                        "miss",
+                        "twinsCredited",
+                        "sessionId",
+                        "sequence",
+                        "variants",
+                        "hint");
         assertThat(Json.stringify(at(response.body(), "results.1")))
                 .isEqualTo("{\"cellId\":\"cell_zzzzzz\",\"ok\":false,\"message\":\"cell cell_zzzzzz was not found\"}");
     }

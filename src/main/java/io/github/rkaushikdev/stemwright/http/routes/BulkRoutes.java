@@ -42,7 +42,8 @@ public final class BulkRoutes {
      *
      * @throws ValidationException for a body that is not an object, {@code answers} that is not an
      *     array, holds no answer or more than {@link #MAX_BATCH}, and for the first row that is not an
-     *     object with a string {@code cellId} and {@code given}, named by its index
+     *     object with a string {@code cellId} and {@code given} and, when it has one, a {@code
+     *     hinted} that names a rung of the hint ladder, named by its index
      */
     public static List<BulkAnswer> readBatch(Json body) {
         JsonObject row = Codec.requireObject("body", body);
@@ -57,8 +58,10 @@ public final class BulkRoutes {
         for (int index = 0; index < rows.size(); index += 1) {
             String path = "body.answers." + index;
             JsonObject answer = Codec.requireObject(path, rows.get(index));
-            answers.add(
-                    new BulkAnswer(Codec.readString(answer, path, "cellId"), Codec.readString(answer, path, "given")));
+            answers.add(new BulkAnswer(
+                    Codec.readString(answer, path, "cellId"),
+                    Codec.readString(answer, path, "given"),
+                    AnswerBody.hintedFrom(answer, path)));
         }
         return List.copyOf(answers);
     }
@@ -72,8 +75,9 @@ public final class BulkRoutes {
     }
 
     /**
-     * Answers the batch in order. A refused answer, whatever refused it, becomes a result carrying
-     * its message, and the response is a 207 rather than a 200 when there was one.
+     * Answers the batch in order. An accepted answer's result carries every field the single answer
+     * route writes; a refused answer, whatever refused it, becomes a result carrying its message, and
+     * the response is a 207 rather than a 200 when there was one.
      */
     private static HttpResponse answerAll(DrillRouteDeps deps, AuthedRequest request) {
         DrillRoutes.requireDrill(deps, request);
@@ -87,14 +91,11 @@ public final class BulkRoutes {
 
         for (BulkAnswer answer : batch) {
             try {
-                AnswerOutcome outcome =
-                        deps.drill().answer(DrillRoutes.answerFor(request, day, answer.cellId(), answer.given()));
+                AnswerOutcome outcome = deps.drill()
+                        .answer(DrillRoutes.answerFor(request, day, answer.cellId(), answer.given(), answer.hinted()));
                 accepted += 1;
-                results.add(Json.object()
-                        .put("cellId", answer.cellId())
-                        .put("ok", true)
-                        .put("verdict", outcome.review().match().verdict().key())
-                        .put("expected", outcome.review().expected())
+                results.add(AnswerBody.into(
+                                Json.object().put("cellId", answer.cellId()).put("ok", true), outcome)
                         .build());
             } catch (RuntimeException error) {
                 refused += 1;
