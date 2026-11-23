@@ -31,6 +31,7 @@ import java.util.Optional;
  * gen.sg  -ae
  * nom.sg  = vis        a literal form rather than an ending
  * gen.sg  aorist -os   an ending on a named stem
+ * acc.pl  -es|-is      an ending and the variants also accepted
  *
  * syncretism ae: gen.sg dat.sg nom.pl
  * </pre>
@@ -43,6 +44,9 @@ import java.util.Optional;
  * @param syncretism the syncretism groups it declares, {@link SyncretismMap#NONE} when it declares none
  */
 public record ParadigmFile(ParadigmProfile profile, SyncretismMap syncretism) {
+
+    /** What separates an ending from the variants written after it. */
+    private static final String VARIANT_BAR = "|";
 
     public ParadigmFile {
         Objects.requireNonNull(profile, "profile");
@@ -113,7 +117,9 @@ public record ParadigmFile(ParadigmProfile profile, SyncretismMap syncretism) {
                 continue;
             }
             String stem = slot.stemRole().equals(Stem.DEFAULT_ROLE) ? "" : slot.stemRole() + " ";
-            lines.add(slot.bundle() + " " + stem + "-" + slot.affix());
+            List<String> endings = new ArrayList<>(List.of(slot.affix()));
+            endings.addAll(slot.variants());
+            lines.add(slot.bundle() + " " + stem + "-" + String.join(VARIANT_BAR + "-", endings));
         }
 
         if (!syncretism.groups().isEmpty()) {
@@ -140,7 +146,8 @@ public record ParadigmFile(ParadigmProfile profile, SyncretismMap syncretism) {
 
     /**
      * A slot line: a bundle, then an ending with or without its dash, a named stem and an ending, or
-     * an equals sign and a literal form that runs to the end of the line.
+     * an equals sign and a literal form that runs to the end of the line. An ending may be followed by
+     * the variants the slot also accepts, each after a bar.
      */
     private static ParadigmSlotInput slotFrom(List<String> parts, int line) {
         String bundle = parts.get(0);
@@ -156,12 +163,14 @@ public record ParadigmFile(ParadigmProfile profile, SyncretismMap syncretism) {
             }
             return ParadigmSlotInput.literal(bundle, literal);
         }
-        if (rest.size() == 1) {
-            return ParadigmSlotInput.of(bundle, withoutDash(rest.get(0)));
+        ParadigmSlotInput.Builder slot = ParadigmSlotInput.builder(bundle);
+        if (rest.size() > 1) {
+            slot.stemRole(rest.get(0));
         }
-        return ParadigmSlotInput.builder(bundle)
-                .stemRole(rest.get(0))
-                .affix(withoutDash(rest.get(1)))
+        List<String> endings = Text.split(rest.get(rest.size() > 1 ? 1 : 0), VARIANT_BAR).stream()
+                .map(ParadigmFile::withoutDash)
+                .toList();
+        return slot.affix(endings.getFirst(), endings.subList(1, endings.size()).toArray(String[]::new))
                 .build();
     }
 

@@ -212,6 +212,36 @@ class RuleSetTest {
     }
 
     @Nested
+    class Variants {
+
+        @Test
+        void joinsEachVariantEndingToTheSameStemByTheSameRules() {
+            Lexeme rex = lexeme("rex", "third-declension", "reg");
+            ParadigmProfile profile = profileOf("p", "c", ParadigmSlotInput.of("gen.sg", "is", "sis"));
+            RealisedCell realised = LATIN_RULES.realise(rex, profile, GEN_SG);
+            assertThat(realised.form()).isEqualTo("regis");
+            assertThat(realised.variants()).containsExactly("rexis");
+            assertThat(realised.acceptedForms()).containsExactly("regis", "rexis");
+        }
+
+        @Test
+        void dropsAVariantTheRulesTurnIntoTheMainForm() {
+            Lexeme mas = lexeme("mas", "third-declension", "mas");
+            ParadigmProfile profile = profileOf("p", "c", ParadigmSlotInput.of("gen.sg", "is", "sis"));
+            RealisedCell realised = LATIN_RULES.realise(mas, profile, GEN_SG);
+            assertThat(realised.form()).isEqualTo("masis");
+            assertThat(realised.variants()).isEmpty();
+        }
+
+        @Test
+        void givesALiteralSlotNoVariants() {
+            ParadigmProfile profile = profileOf("p", "c", ParadigmSlotInput.literal("gen.sg", "vis"));
+            assertThat(RuleSet.NONE.realise(PUELLA, profile, GEN_SG).acceptedForms())
+                    .containsExactly("vis");
+        }
+    }
+
+    @Nested
     class Explain {
 
         @Test
@@ -234,6 +264,14 @@ class RuleSetTest {
             ParadigmProfile profile = profileOf("p", "c", ParadigmSlotInput.literal("gen.sg", "vis"));
             RealisedCell realised = RuleSet.NONE.realise(PUELLA, profile, GEN_SG);
             assertThat(realised.explain(LATIN_NOUN, GEN_SG)).isEqualTo("vis is stated outright by the profile");
+        }
+
+        @Test
+        void namesTheVariantsASlotAlsoAccepts() {
+            ParadigmProfile profile = profileOf("p", "c", ParadigmSlotInput.of("gen.sg", "ae", "ai"));
+            RealisedCell realised = RuleSet.NONE.realise(PUELLA, profile, GEN_SG);
+            assertThat(realised.explain(LATIN_NOUN, GEN_SG))
+                    .isEqualTo("puell plus ae gives puellae in latin, and also puellai");
         }
 
         @Test

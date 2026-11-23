@@ -101,18 +101,25 @@ public record RuleSet(String language, List<JoinRule> rules) {
 
     /**
      * Realises one slot for a lexeme: the literal when the slot states one, otherwise the stem the
-     * slot asks for, falling back to the base stem, joined to the affix.
+     * slot asks for, falling back to the base stem, joined to the affix. Each variant ending is
+     * joined to the same stem; a variant the join rules turn into the main form is dropped.
      *
      * @throws ValidationException when the lexeme has neither the stem nor a base stem
      */
     public RealisedCell realiseSlot(Lexeme entry, ParadigmSlot slot) {
         if (slot.literal().isPresent()) {
-            return new RealisedCell(slot.bundle(), slot.literal().get(), slot.stemRole(), "", "", true, List.of());
+            return new RealisedCell(
+                    slot.bundle(), slot.literal().get(), slot.stemRole(), "", "", true, List.of(), List.of());
         }
         Stem stem = entry.stems().resolve(slot.stemRole());
         JoinResult joined = joinAtSeam(stem.form(), slot.affix());
+        List<String> variants = slot.variants().stream()
+                .map(variant -> joinAtSeam(stem.form(), variant).form())
+                .filter(form -> !form.equals(joined.form()))
+                .distinct()
+                .toList();
         return new RealisedCell(
-                slot.bundle(), joined.form(), stem.role(), stem.form(), slot.affix(), false, joined.steps());
+                slot.bundle(), joined.form(), stem.role(), stem.form(), slot.affix(), false, joined.steps(), variants);
     }
 
     /**

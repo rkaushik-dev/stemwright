@@ -11,9 +11,11 @@ import io.github.rkaushikdev.stemwright.domain.text.Normalise;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A paradigm profile says how every cell of one inflection class is built. One slot per bundle:
@@ -55,9 +57,10 @@ public record ParadigmProfile(
     }
 
     /**
-     * Checks a profile as written, reporting every unreadable, incomplete or repeated bundle and
-     * every slot with neither an affix nor a literal at once. A key, class key, stem role, literal,
-     * note or label that is not usable fails on the spot.
+     * Checks a profile as written, reporting every unreadable, incomplete or repeated bundle, every
+     * slot with neither an affix nor a literal and every literal slot with variant endings at once. A
+     * key, class key, stem role, literal, note, label or repeated variant that is not usable fails on
+     * the spot.
      */
     public static ParadigmProfile of(FeatureSchema schema, ParadigmProfileInput input) {
         ProblemCollector problems = new ProblemCollector();
@@ -92,6 +95,10 @@ public record ParadigmProfile(
                 problems.add(path, "must give either an affix or a literal form");
                 continue;
             }
+            if (slotInput.literal().isPresent() && !slotInput.variants().isEmpty()) {
+                problems.add(path, "states a literal form, which takes no variant endings");
+                continue;
+            }
 
             slots.put(canonical, slotOf(path, canonical, slotInput));
         }
@@ -112,7 +119,22 @@ public record ParadigmProfile(
         Optional<String> literal =
                 input.literal().map(text -> Normalise.requireText(path + ".literal", text, LITERAL_LIMIT));
         Optional<String> note = input.note().map(text -> Normalise.requireText(path + ".note", text, NOTE_LIMIT));
-        return new ParadigmSlot(canonical, stemRole, affix, literal, note);
+        return new ParadigmSlot(canonical, stemRole, affix, literal, note, variantsOf(path, affix, input.variants()));
+    }
+
+    /**
+     * The variant endings normalised, each checked against the main ending and the variants before
+     * it, because a variant that repeats an ending accepts nothing new and is a typing slip.
+     */
+    private static List<String> variantsOf(String path, String affix, List<String> written) {
+        Set<String> seen = new LinkedHashSet<>(List.of(affix));
+        for (int index = 0; index < written.size(); index += 1) {
+            String variant = Normalise.normaliseInput(written.get(index));
+            if (!seen.add(variant)) {
+                throw ValidationException.field(path + ".variants." + index, "repeats the ending " + variant);
+            }
+        }
+        return List.copyOf(seen).subList(1, seen.size());
     }
 
     public Optional<ParadigmSlot> slotFor(FeatureBundle bundle) {
@@ -186,6 +208,11 @@ public record ParadigmProfile(
 
     private static ParadigmSlotInput inputOf(ParadigmSlot slot) {
         return new ParadigmSlotInput(
-                slot.bundle(), Optional.of(slot.stemRole()), Optional.of(slot.affix()), slot.literal(), slot.note());
+                slot.bundle(),
+                Optional.of(slot.stemRole()),
+                Optional.of(slot.affix()),
+                slot.literal(),
+                slot.note(),
+                slot.variants());
     }
 }

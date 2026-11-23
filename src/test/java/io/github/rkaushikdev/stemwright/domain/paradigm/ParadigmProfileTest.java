@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.rkaushikdev.stemwright.domain.features.FeatureBundle;
 import io.github.rkaushikdev.stemwright.support.Problems;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Nested;
@@ -85,6 +86,32 @@ class ParadigmProfileTest {
                     "x", "y", ParadigmSlotInput.builder("gen.sg").build());
             assertThat(Problems.problemMessages(() -> ParadigmProfile.of(LATIN_NOUN, input)))
                     .containsExactly("slots.0 must give either an affix or a literal form");
+        }
+
+        @Test
+        void keepsTheVariantEndingsASlotAlsoAccepts() {
+            ParadigmProfile profile = ParadigmProfile.of(
+                    LATIN_NOUN, ParadigmProfileInput.of("i-stem", "y", ParadigmSlotInput.of("acc.pl", "ēs", " īs ")));
+            FeatureBundle bundle = FeatureBundle.of(LATIN_NOUN, ordered("case", "acc", "number", "pl"));
+            assertThat(profile.requireSlot(bundle).affix()).isEqualTo("ēs");
+            assertThat(profile.requireSlot(bundle).variants()).containsExactly("īs");
+        }
+
+        @Test
+        void refusesAVariantThatRepeatsAnEnding() {
+            ParadigmProfileInput repeated =
+                    ParadigmProfileInput.of("x", "y", ParadigmSlotInput.of("acc.pl", "es", "is", "es"));
+            assertThat(Problems.problemMessages(() -> ParadigmProfile.of(LATIN_NOUN, repeated)))
+                    .containsExactly("slots.0.variants.1 repeats the ending es");
+        }
+
+        @Test
+        void refusesVariantEndingsOnALiteralSlot() {
+            ParadigmSlotInput both = new ParadigmSlotInput(
+                    "nom.sg", Optional.empty(), Optional.empty(), Optional.of("vis"), Optional.empty(), List.of("is"));
+            assertThat(Problems.problemMessages(
+                            () -> ParadigmProfile.of(LATIN_NOUN, ParadigmProfileInput.of("x", "y", both))))
+                    .containsExactly("slots.0 states a literal form, which takes no variant endings");
         }
 
         @Test
@@ -174,6 +201,13 @@ class ParadigmProfileTest {
             ParadigmProfile grown = SECOND_NEUTER.withSlot(LATIN_NOUN, ParadigmSlotInput.of("gen.sg", "ii"));
             assertThat(grown.slotCount()).isEqualTo(10);
             assertThat(grown.slotFor(genSg).map(ParadigmSlot::affix)).contains("ii");
+        }
+
+        @Test
+        void keepsTheVariantsOfTheSlotsItDidNotReplace() {
+            ParadigmProfile withVariant = SECOND_NEUTER.withSlot(LATIN_NOUN, ParadigmSlotInput.of("gen.sg", "i", "ii"));
+            ParadigmProfile grown = withVariant.withSlot(LATIN_NOUN, ParadigmSlotInput.of("dat.sg", "o"));
+            assertThat(grown.slotFor(genSg).map(ParadigmSlot::variants)).contains(List.of("ii"));
         }
 
         @Test

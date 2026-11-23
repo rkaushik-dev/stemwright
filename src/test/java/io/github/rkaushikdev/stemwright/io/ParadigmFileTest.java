@@ -93,6 +93,17 @@ class ParadigmFileTest {
         }
 
         @Test
+        void readsTheVariantsWrittenAfterAnEnding() {
+            ParadigmFile file = parse("profile p\nclass c\nacc.pl -es|-is\ngen.pl oblique -um|ium\n");
+            FeatureBundle accPl = FeatureBundle.of(LATIN_NOUN, ordered("case", "acc", "number", "pl"));
+            FeatureBundle genPl = FeatureBundle.of(LATIN_NOUN, ordered("case", "gen", "number", "pl"));
+            assertThat(file.profile().requireSlot(accPl).affix()).isEqualTo("es");
+            assertThat(file.profile().requireSlot(accPl).variants()).containsExactly("is");
+            assertThat(file.profile().requireSlot(genPl).stemRole()).isEqualTo("oblique");
+            assertThat(file.profile().requireSlot(genPl).variants()).containsExactly("ium");
+        }
+
+        @Test
         void readsASyncretismGroup() {
             ParadigmFile file = parse(SOURCE);
             assertThat(file.syncretism().twinsOf("case=gen;number=sg")).hasSize(2);
@@ -190,6 +201,13 @@ class ParadigmFileTest {
         void writesALiteralWithAnEqualsSign() {
             ParadigmFile file = parse("profile p\nclass c\nnom.sg = vis\n");
             assertThat(file.write()).contains("= vis");
+        }
+
+        @Test
+        void writesTheVariantsBackAfterABar() {
+            ParadigmFile file = parse("profile p\nclass c\nacc.pl -es|-is\n");
+            assertThat(file.write()).contains("case=acc;number=pl -es|-is");
+            assertThat(parse(file.write()).profile()).isEqualTo(file.profile());
         }
 
         @Test

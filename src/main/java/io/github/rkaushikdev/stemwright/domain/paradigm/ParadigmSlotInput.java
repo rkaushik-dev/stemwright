@@ -1,5 +1,6 @@
 package io.github.rkaushikdev.stemwright.domain.paradigm;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -11,17 +12,28 @@ import java.util.Optional;
  * @param affix the ending; a slot needs this or a literal
  * @param literal a full form that replaces stem plus affix; a slot needs this or an affix
  * @param note an editor's remark on the slot
+ * @param variants other endings the slot also accepts, which only a slot with an affix may have
  */
 public record ParadigmSlotInput(
         String bundle,
         Optional<String> stemRole,
         Optional<String> affix,
         Optional<String> literal,
-        Optional<String> note) {
+        Optional<String> note,
+        List<String> variants) {
+
+    public ParadigmSlotInput {
+        variants = List.copyOf(variants);
+    }
 
     /** The common shape: an ending on the base stem. */
     public static ParadigmSlotInput of(String bundle, String affix) {
         return builder(bundle).affix(affix).build();
+    }
+
+    /** An ending on the base stem, and the other endings the slot also accepts there. */
+    public static ParadigmSlotInput of(String bundle, String affix, String... variants) {
+        return builder(bundle).affix(affix, variants).build();
     }
 
     /** A cell the profile states outright rather than builds. */
@@ -42,6 +54,7 @@ public record ParadigmSlotInput(
         private String affix;
         private String literal;
         private String note;
+        private List<String> variants = List.of();
 
         private Builder(String bundle) {
             this.bundle = Objects.requireNonNull(bundle, "bundle");
@@ -54,6 +67,13 @@ public record ParadigmSlotInput(
 
         public Builder affix(String affix) {
             this.affix = Objects.requireNonNull(affix, "affix");
+            return this;
+        }
+
+        /** The ending, and the other endings the slot also accepts on the same stem. */
+        public Builder affix(String affix, String... variants) {
+            this.affix = Objects.requireNonNull(affix, "affix");
+            this.variants = List.of(variants);
             return this;
         }
 
@@ -73,7 +93,8 @@ public record ParadigmSlotInput(
                     Optional.ofNullable(stemRole),
                     Optional.ofNullable(affix),
                     Optional.ofNullable(literal),
-                    Optional.ofNullable(note));
+                    Optional.ofNullable(note),
+                    variants);
         }
     }
 }
