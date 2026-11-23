@@ -185,6 +185,43 @@ class MatchResultTest {
     }
 
     @Nested
+    class TransliteratedAnswers {
+
+        private static final TransliterationTable BETA = TransliterationTable.GREEK_BETA_CODE;
+
+        @Test
+        void readsAnAnswerTypedOnALatinKeyboardThroughTheTable() {
+            MatchResult result = compareForm("ἄνθρωπος", "anthrwpos", LENIENT, BETA);
+            assertThat(result.verdict()).isEqualTo(MatchVerdict.TOLERATED);
+            assertThat(result.given()).isEqualTo("ανθρωποσ");
+            assertThat(result.foldsUsed()).containsExactly(FoldStep.FINAL_FORMS, FoldStep.MARKS);
+        }
+
+        @Test
+        void stillMarksTheAccentsTheLevelDoesNotForgive() {
+            MatchResult result = compareForm("ἄνθρωπος", "anthrwpos", EXACT, BETA);
+            assertThat(result.verdict()).isEqualTo(MatchVerdict.NEAR);
+            assertThat(result.distance()).isEqualTo(1);
+            assertThat(compareForm("λογος", "logos", EXACT, BETA).verdict()).isEqualTo(MatchVerdict.TOLERATED);
+        }
+
+        @Test
+        void keepsTheTypedMarkWhenTheAnswerIsAlreadyRightOrCannotBeRead() {
+            MatchResult typed = compareForm("λόγος", "λόγος", EXACT, BETA);
+            assertThat(typed.verdict()).isEqualTo(MatchVerdict.EXACT);
+            assertThat(typed.given()).isEqualTo("λόγος");
+            assertThat(compareForm("λόγος", "logos1", EXACT, BETA).given()).isEqualTo("logos1");
+        }
+
+        @Test
+        void changesNothingUnderATableWithNoRules() {
+            assertThat(compareForm("ἄνθρωπος", "anthrwpos", LENIENT, TransliterationTable.NONE))
+                    .isEqualTo(compareForm("ἄνθρωπος", "anthrwpos", LENIENT));
+            assertThat(compareForm("ἄνθρωπος", "anthrwpos", LENIENT).verdict()).isEqualTo(MatchVerdict.WRONG);
+        }
+    }
+
+    @Nested
     class Describe {
 
         @Test

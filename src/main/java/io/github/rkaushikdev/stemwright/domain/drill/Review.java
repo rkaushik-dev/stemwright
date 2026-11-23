@@ -50,7 +50,8 @@ public final class Review {
     }
 
     /**
-     * Marks one answer and works out everything it changes. A right answer climbs the cell and
+     * Marks one answer, as typed or as read through the language's transliteration table, and works
+     * out everything it changes. A right answer climbs the cell and
      * passes credit to its twins, a near miss holds it at its rung, and a wrong one lapses it; the
      * leech policy then looks at the cell whatever the verdict. Unless the settings say otherwise,
      * the cell and its twins are buried for the rest of the sitting, again whatever the verdict.
@@ -67,7 +68,8 @@ public final class Review {
         ExpectedForm expected = expectedFormFor(context, settings, cell, on);
 
         ResolvedTolerance tolerance = settings.ortho().resolveTolerance(request.tolerance());
-        MatchResult match = MatchResult.compareForm(expected.form(), request.given(), tolerance.level());
+        MatchResult match = MatchResult.compareForm(
+                expected.form(), request.given(), tolerance.level(), settings.transliteration());
 
         CellStrength before = ledger.strengthFor(cell.id());
         CellStrength after;

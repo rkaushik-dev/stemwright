@@ -14,6 +14,7 @@ import io.github.rkaushikdev.stemwright.domain.drill.DeckInput;
 import io.github.rkaushikdev.stemwright.domain.lexicon.ClassRegistry;
 import io.github.rkaushikdev.stemwright.domain.lexicon.InflectionClassInput;
 import io.github.rkaushikdev.stemwright.domain.lexicon.PartOfSpeech;
+import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationTable;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBook;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBookInput;
 import io.github.rkaushikdev.stemwright.domain.paradigm.RuleSet;
@@ -65,7 +66,8 @@ class DoctorCommandTest {
                                         .label("First declension")
                                         .build())),
                         Ortho.LATIN,
-                        RuleSet.NONE));
+                        RuleSet.NONE,
+                        TransliterationTable.NONE));
         Map<String, String> bound = new LinkedHashMap<>();
         bound.put("first-declension", "first-declension");
         bound.putAll(bindings);

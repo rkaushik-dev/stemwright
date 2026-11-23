@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.rkaushikdev.stemwright.app.DomainEvent.AttemptRecorded;
 import io.github.rkaushikdev.stemwright.app.DomainEvent.CellSuspended;
 import io.github.rkaushikdev.stemwright.app.DomainEvent.SessionClosed;
+import io.github.rkaushikdev.stemwright.app.LanguageBundle;
 import io.github.rkaushikdev.stemwright.app.RecordingBus;
 import io.github.rkaushikdev.stemwright.app.Stores;
 import io.github.rkaushikdev.stemwright.domain.drill.Deck;
@@ -25,10 +26,14 @@ import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
 import io.github.rkaushikdev.stemwright.domain.mastery.LadderInput;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationRule;
+import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationTable;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.support.App.Harness;
+import io.github.rkaushikdev.stemwright.support.Drill;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Nested;
@@ -224,6 +229,32 @@ class DrillServiceTest {
             assertThat(lenient.review().match().isCorrect()).isTrue();
             assertThat(strict.review().attempt().toleranceLevel()).isEqualTo("exact");
             assertThat(strict.review().match().isCorrect()).isFalse();
+        }
+
+        @Test
+        void readsAnAnswerThroughTheLanguageTransliterationTable() {
+            Built built = build();
+            LanguageBundle latin = built.stores().languages().get("latin").orElseThrow();
+            TransliterationTable typedAe = TransliterationTable.of(
+                    "latin",
+                    List.of(
+                            new TransliterationRule("p", "p"),
+                            new TransliterationRule("u", "u"),
+                            new TransliterationRule("e", "e"),
+                            new TransliterationRule("l", "l"),
+                            new TransliterationRule("q", "ae")));
+            String genitive = Cell.idFor(Drill.PUELLA.id(), "case=gen;number=sg");
+
+            AnswerOutcome plain = built.service().answer(ask(genitive, "puellq"), SETTINGS);
+            built.stores()
+                    .languages()
+                    .put(new LanguageBundle(
+                            latin.language(), latin.schema(), latin.classes(), latin.ortho(), latin.rules(), typedAe));
+            AnswerOutcome read = built.service().answer(ask(genitive, "puellq"), SETTINGS);
+
+            assertThat(plain.review().match().isCorrect()).isFalse();
+            assertThat(read.review().match().isCorrect()).isTrue();
+            assertThat(read.review().attempt().given()).isEqualTo("puellq");
         }
 
         @Test

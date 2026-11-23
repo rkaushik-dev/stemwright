@@ -13,9 +13,12 @@ import io.github.rkaushikdev.stemwright.domain.mastery.LeechAction;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
 import io.github.rkaushikdev.stemwright.domain.ortho.MatchVerdict;
+import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationRule;
+import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationTable;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -76,6 +79,40 @@ class ReviewTest {
                 empty(),
                 BurialSet.NONE,
                 request(cell, given, on).build());
+    }
+
+    @Nested
+    class ThroughATransliterationTable {
+
+        /** A table that spells the letters of puellae as themselves and reads q as ae. */
+        private static final TransliterationTable TYPED_AE = TransliterationTable.of(
+                "latin",
+                List.of(
+                        new TransliterationRule("p", "p"),
+                        new TransliterationRule("u", "u"),
+                        new TransliterationRule("e", "e"),
+                        new TransliterationRule("l", "l"),
+                        new TransliterationRule("q", "ae")));
+
+        @Test
+        void marksTheAnswerAsTheTableReadsIt() {
+            ReviewSettings settings = ReviewSettings.of(
+                    REVIEW_SETTINGS.ortho(),
+                    REVIEW_SETTINGS.rules(),
+                    REVIEW_SETTINGS.ladder(),
+                    REVIEW_SETTINGS.leech(),
+                    TYPED_AE);
+            ReviewResult result = ask("puellq", GEN_SG, TERM, settings);
+            assertThat(result.match().isCorrect()).isTrue();
+            assertThat(result.attempt().given()).isEqualTo("puellq");
+            assertThat(result.ledger().strengthFor(GEN_SG.id()).correct()).isEqualTo(1);
+        }
+
+        @Test
+        void readsNothingThroughTheTableByDefault() {
+            assertThat(REVIEW_SETTINGS.transliteration()).isEqualTo(TransliterationTable.NONE);
+            assertThat(ask("puellq").match().isCorrect()).isFalse();
+        }
     }
 
     @Nested

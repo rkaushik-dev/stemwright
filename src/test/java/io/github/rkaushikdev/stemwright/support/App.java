@@ -5,6 +5,7 @@ import io.github.rkaushikdev.stemwright.app.LanguageBundle;
 import io.github.rkaushikdev.stemwright.app.RecordingBus;
 import io.github.rkaushikdev.stemwright.app.Stores;
 import io.github.rkaushikdev.stemwright.domain.lexicon.Lexeme;
+import io.github.rkaushikdev.stemwright.domain.ortho.TransliterationTable;
 import io.github.rkaushikdev.stemwright.domain.paradigm.RuleSet;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.infra.MemoryStores;
@@ -28,9 +29,12 @@ public final class App {
     /** Nine in the morning UTC on {@link #TODAY}, the instant the harness clock answers. */
     public static final Instant NOW = Instant.parse("2024-10-21T09:00:00Z");
 
-    /** {@link Profiles#LATIN_NOUN}, {@link Classes#LATIN}, {@link Ortho#LATIN} and no join rules. */
-    public static final LanguageBundle LATIN_BUNDLE =
-            new LanguageBundle("latin", Profiles.LATIN_NOUN, Classes.LATIN, Ortho.LATIN, RuleSet.NONE);
+    /**
+     * {@link Profiles#LATIN_NOUN}, {@link Classes#LATIN}, {@link Ortho#LATIN}, no join rules and no
+     * transliteration.
+     */
+    public static final LanguageBundle LATIN_BUNDLE = new LanguageBundle(
+            "latin", Profiles.LATIN_NOUN, Classes.LATIN, Ortho.LATIN, RuleSet.NONE, TransliterationTable.NONE);
 
     /**
      * Fresh memory stores holding {@link #LATIN_BUNDLE}, {@link Book#LATIN_BOOK} and the four nouns

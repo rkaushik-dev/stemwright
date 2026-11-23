@@ -218,7 +218,8 @@ public final class DrillService {
     }
 
     /**
-     * The language's marking with the caller's ladder and leech policy, under the drill policy the
+     * The language's marking and transliteration with the caller's ladder and leech policy, under the
+     * drill policy the
      * settings patch: the policy's {@code buryTwins} decides whether an answer buries the cell and
      * its twins, and a patch that names a leech threshold moves the leech policy to it while keeping
      * what the leech policy does to a leech. The credit rule is left at its default.
@@ -230,7 +231,7 @@ public final class DrillService {
                 .leechThreshold()
                 .map(threshold -> withThreshold(settings.leech(), threshold))
                 .orElse(settings.leech());
-        return ReviewSettings.of(bundle.ortho(), bundle.rules(), settings.ladder(), leech)
+        return ReviewSettings.of(bundle.ortho(), bundle.rules(), settings.ladder(), leech, bundle.transliteration())
                 .withBuryTwins(policy.buryTwins());
     }
 

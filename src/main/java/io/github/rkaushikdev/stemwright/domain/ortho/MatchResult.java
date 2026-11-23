@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.stemwright.domain.ortho;
 
 import io.github.rkaushikdev.stemwright.domain.text.Normalise;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -86,15 +87,40 @@ public record MatchResult(
         MatchResult best = null;
         for (String expected : expectedForms) {
             MatchResult result = compareForm(expected, given, level);
-            if (best == null || rank(result.verdict) > rank(best.verdict)) {
-                best = result;
-                continue;
-            }
-            if (rank(result.verdict) == rank(best.verdict) && result.distance < best.distance) {
+            if (best == null || isBetter(result, best)) {
                 best = result;
             }
         }
         return best != null ? best : compareForm("", given, level);
+    }
+
+    /**
+     * Marks an answer that may have been typed through a transliteration table. The answer is marked
+     * as typed first; when that is not right and every letter of it is a source in the table, it is
+     * marked again as transliterated, and the better of the two marks stands, the typed one winning a
+     * tie. The transliterated reading is also forgiven the final letter shapes, which nobody typing
+     * through a table has a key for. The result carries whichever reading it marked as the given
+     * form. Under a table with no rules this is {@link #compareForm(String, String, ToleranceLevel)}.
+     */
+    public static MatchResult compareForm(
+            String expected, String given, ToleranceLevel level, TransliterationTable table) {
+        MatchResult typed = compareForm(expected, given, level);
+        if (typed.isCorrect() || !table.isTransliterable(given)) {
+            return typed;
+        }
+        List<FoldStep> folds = new ArrayList<>(level.folds());
+        if (!folds.contains(FoldStep.FINAL_FORMS)) {
+            folds.add(FoldStep.FINAL_FORMS);
+        }
+        ToleranceLevel forgiving = new ToleranceLevel(level.key(), level.label(), folds);
+        MatchResult converted = compareForm(expected, table.transliterate(given), forgiving);
+        return isBetter(converted, typed) ? converted : typed;
+    }
+
+    /** A better verdict wins, and between two equal verdicts the smaller distance. */
+    private static boolean isBetter(MatchResult candidate, MatchResult best) {
+        int byVerdict = Integer.compare(rank(candidate.verdict), rank(best.verdict));
+        return byVerdict != 0 ? byVerdict > 0 : candidate.distance < best.distance;
     }
 
     private static int rank(MatchVerdict verdict) {
