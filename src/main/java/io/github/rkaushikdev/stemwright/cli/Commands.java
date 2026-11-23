@@ -1,18 +1,13 @@
 package io.github.rkaushikdev.stemwright.cli;
 
 import io.github.rkaushikdev.stemwright.app.Application;
-import io.github.rkaushikdev.stemwright.app.LanguageBundle;
 import io.github.rkaushikdev.stemwright.app.Loaders;
-import io.github.rkaushikdev.stemwright.domain.drill.DrillContext;
 import io.github.rkaushikdev.stemwright.domain.drill.Membership;
 import io.github.rkaushikdev.stemwright.domain.lexicon.Lexeme;
 import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
 import io.github.rkaushikdev.stemwright.domain.mastery.LedgerCounts;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
-import io.github.rkaushikdev.stemwright.domain.paradigm.ParadigmTable;
-import io.github.rkaushikdev.stemwright.domain.paradigm.ResolvedProfile;
-import io.github.rkaushikdev.stemwright.domain.paradigm.TableRequest;
 import io.github.rkaushikdev.stemwright.domain.report.Coverage;
 import io.github.rkaushikdev.stemwright.domain.report.CoverageRow;
 import io.github.rkaushikdev.stemwright.http.AccountDirectory;
@@ -26,10 +21,6 @@ import java.util.Optional;
 /**
  * The commands. Each one loads what it needs, asks the domain, and formats the answer, and none of
  * them holds a rule of its own.
- *
- * <p>{@code paradigm} is the command this cli exists for. An instructor checking why a learner was
- * marked wrong wants the table the learner was graded against, on the day they were graded, and
- * that is one call once the revision resolution lives in the layer below.
  *
  * <p>Nothing here goes through the report service, because that service takes a course scope so
  * it can check who is asking. A local operator running this binary has already been trusted by the
@@ -53,38 +44,10 @@ public final class Commands {
 
     /**
      * {@code paradigm}: the table a lexeme was graded against on a day, headed by the profile and
-     * the revision in force then.
+     * the revision in force then, and with {@code --trace} how each form was built.
      */
     public static Command paradigm(Application app) {
-        return Command.of(
-                "paradigm",
-                "print the table a lexeme was graded against on a day",
-                "stemwright paradigm --language latin --lexeme lex_x --rows case --columns number",
-                FlagSpecs.of(
-                        Map.entry("language", Flags.LANGUAGE),
-                        Map.entry("lexeme", requiredString("the lexeme id")),
-                        Map.entry("rows", requiredString("the dimension down the side")),
-                        Map.entry("columns", requiredString("the dimension across the top")),
-                        Map.entry("on", Flags.DAY)),
-                (args, context) -> {
-                    String language = args.requireFlag("language");
-                    LocalDate on = Flags.dayFrom(app.clock(), args);
-                    LanguageBundle bundle = Loaders.requireLanguage(app.stores(), language);
-                    DrillContext drill = app.drill().context(language);
-                    Lexeme entry = drill.lexicon().requireLexeme(args.requireFlag("lexeme"));
-                    ResolvedProfile resolved = drill.book().requireProfileFor(drill.classes(), entry.classKey(), on);
-
-                    ParadigmTable grid = ParadigmTable.build(
-                            bundle.schema(),
-                            bundle.rules(),
-                            entry,
-                            resolved.revision().profile(),
-                            TableRequest.of(args.requireFlag("rows"), args.requireFlag("columns")));
-                    String heading = entry.citationForm() + " under "
-                            + resolved.revision().profileKey() + " revision "
-                            + resolved.revision().ordinal();
-                    return String.join("\n", heading, "", grid.toText());
-                });
+        return ParadigmCommand.of(app);
     }
 
     /**
@@ -195,9 +158,5 @@ public final class Commands {
                 DeckCommand.of(app),
                 DeckCommand.decks(app),
                 DoctorCommand.of(app));
-    }
-
-    private static FlagSpec requiredString(String describe) {
-        return FlagSpec.of(FlagKind.STRING, describe).asRequired();
     }
 }

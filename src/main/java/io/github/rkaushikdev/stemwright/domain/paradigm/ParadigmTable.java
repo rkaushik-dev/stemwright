@@ -88,17 +88,20 @@ public record ParadigmTable(
                 Optional<FeatureBundle> found =
                         candidates.stream().filter(fixing(wanted)).findFirst();
                 if (found.isEmpty()) {
-                    row.add(new TableCell("", Optional.empty(), true));
+                    row.add(new TableCell("", Optional.empty(), true, List.of()));
                     continue;
                 }
                 FeatureBundle bundle = found.get();
                 String key = bundle.key();
                 boolean blocked = entry.contradictsInherent(bundle);
-                Optional<String> form = blocked
+                Optional<RealisedCell> realised = blocked
                         ? Optional.empty()
-                        : Optional.ofNullable(profile.slots().get(key))
-                                .map(slot -> rules.realiseSlot(entry, slot).form());
-                row.add(new TableCell(key, form, blocked));
+                        : Optional.ofNullable(profile.slots().get(key)).map(slot -> rules.realiseSlot(entry, slot));
+                row.add(new TableCell(
+                        key,
+                        realised.map(RealisedCell::form),
+                        blocked,
+                        realised.map(RealisedCell::variants).orElse(List.of())));
             }
             cells.add(row);
         }
@@ -172,7 +175,8 @@ public record ParadigmTable(
 
     /**
      * The table as rows of text: a header of column values after an empty corner, then each row
-     * value followed by its forms, the blank standing in for a cell with no form.
+     * value followed by its forms, each with any variants after a slash, the blank standing in for a
+     * cell with no form.
      */
     public List<List<String>> render(String blank) {
         List<List<String>> grid = new ArrayList<>();
@@ -183,7 +187,7 @@ public record ParadigmTable(
         for (int index = 0; index < cells.size(); index += 1) {
             List<String> line = new ArrayList<>();
             line.add(rowValues.get(index));
-            cells.get(index).forEach(cell -> line.add(cell.form().orElse(blank)));
+            cells.get(index).forEach(cell -> line.add(cell.printed().orElse(blank)));
             grid.add(line);
         }
         return grid.stream().map(List::copyOf).toList();

@@ -114,6 +114,19 @@ class ParadigmTableTest {
         }
 
         @Test
+        void printsTheVariantsASlotAcceptsAfterTheFormWithASlash() {
+            ParadigmTable withOldGenitive = caseByNumber(firstDeclensionWith(
+                    ParadigmSlotInput.of("nom.sg", "a"), ParadigmSlotInput.of("gen.sg", "ae", "ai", "as")));
+            assertThat(withOldGenitive.render().get(2)).containsExactly("gen", "puellae/puellai/puellas", "-");
+            assertThat(withOldGenitive.cell("gen", "sg").map(TableCell::variants))
+                    .contains(List.of("puellai", "puellas"));
+            assertThat(withOldGenitive.cell("gen", "sg").flatMap(TableCell::form))
+                    .contains("puellae");
+            assertThat(withOldGenitive.cell("nom", "sg").map(TableCell::variants))
+                    .contains(List.of());
+        }
+
+        @Test
         void padsColumnsToAFixedWidthInTheTextForm() {
             List<String> lines = Text.split(TABLE.toText(), "\n");
             assertThat(lines.get(0)).isEqualTo("     sg       pl");

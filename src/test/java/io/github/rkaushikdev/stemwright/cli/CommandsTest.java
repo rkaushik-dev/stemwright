@@ -159,6 +159,44 @@ class CommandsTest {
         }
 
         @Test
+        void tracesHowEveryFormWasBuiltWhenAsked() {
+            RunResult result = run(
+                    build(),
+                    "paradigm",
+                    "--language",
+                    "latin",
+                    "--lexeme",
+                    Drill.PUELLA.id(),
+                    "--rows",
+                    "case",
+                    "--columns",
+                    "number",
+                    "--trace");
+            List<String> lines = Text.split(result.output(), "\n");
+            assertThat(result.code()).isEqualTo(EXIT_OK);
+            assertThat(lines).contains("How each form is built");
+            assertThat(lines).contains("  case=gen;number=sg  puell plus ae gives puellae in latin");
+            assertThat(lines.stream().filter(line -> line.contains(" gives ")).count())
+                    .isEqualTo(10);
+        }
+
+        @Test
+        void leavesTheTraceOutUnlessItIsAskedFor() {
+            RunResult result = run(
+                    build(),
+                    "paradigm",
+                    "--language",
+                    "latin",
+                    "--lexeme",
+                    Drill.PUELLA.id(),
+                    "--rows",
+                    "case",
+                    "--columns",
+                    "number");
+            assertThat(result.output()).doesNotContain("How each form is built");
+        }
+
+        @Test
         void failsForALexemeNobodyStored() {
             RunResult result = run(
                     build(),
