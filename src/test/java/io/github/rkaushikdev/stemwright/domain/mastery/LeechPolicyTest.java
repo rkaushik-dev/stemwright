@@ -106,6 +106,54 @@ class LeechPolicyTest {
     }
 
     @Nested
+    class AfterAnAnswer {
+
+        private CellStrength lapseOnce(CellStrength strength) {
+            return strength.recordLapse(FLAT, DAY);
+        }
+
+        @Test
+        void firesWhenTheLapseReachesTheThreshold() {
+            LeechPolicy policy = policy().threshold(3).build();
+            CellStrength before = lapsedTimes("cell_a", 2);
+            LeechPolicy.Applied applied = policy.applyTo(before, lapseOnce(before), FLAT, DAY);
+            assertThat(applied.outcome().fired()).isTrue();
+            assertThat(applied.strength().suspended()).isTrue();
+        }
+
+        @Test
+        void givesABroughtBackLeechHalfTheThresholdBeforeCatchingItAgain() {
+            LeechPolicy policy = policy().threshold(4).build();
+            CellStrength back = lapsedTimes("cell_a", 4).suspend().unsuspend(FLAT, DAY);
+            CellStrength fifth = lapseOnce(back);
+            CellStrength sixth = lapseOnce(fifth);
+            assertThat(policy.applyTo(back, fifth, FLAT, DAY).outcome().fired()).isFalse();
+            assertThat(policy.applyTo(back, fifth, FLAT, DAY).strength()).isSameAs(fifth);
+            assertThat(policy.applyTo(fifth, sixth, FLAT, DAY).outcome().fired())
+                    .isTrue();
+            assertThat(policy.applyTo(sixth, lapseOnce(sixth), FLAT, DAY)
+                            .outcome()
+                            .fired())
+                    .isFalse();
+        }
+
+        @Test
+        void neverFiresOnARightAnswerOrANearMissPastTheThreshold() {
+            LeechPolicy tagging = policy().threshold(3).action(LeechAction.TAG).build();
+            CellStrength tagged = lapsedTimes("cell_a", 3);
+            assertThat(tagging.applyTo(tagged, tagged.recordCorrect(FLAT, DAY), FLAT, DAY)
+                            .outcome()
+                            .fired())
+                    .isFalse();
+            assertThat(tagging.applyTo(tagged, tagged.recordNearMiss(FLAT, DAY), FLAT, DAY)
+                            .outcome()
+                            .fired())
+                    .isFalse();
+            assertThat(tagging.isLeech(tagged.recordCorrect(FLAT, DAY))).isTrue();
+        }
+    }
+
+    @Nested
     class IsLeech {
 
         @Test
@@ -250,17 +298,24 @@ class LeechPolicyTest {
 
         @Test
         void readsEachActionOut() {
-            assertThat(policy().threshold(4).build().describe()).isEqualTo("suspend a cell after 4 lapses");
+            assertThat(policy().threshold(4).build().describe())
+                    .isEqualTo("suspend a cell after 4 lapses and again every 2 after");
             assertThat(policy().threshold(4).action(LeechAction.DEMOTE).build().describe())
-                    .isEqualTo("send a cell back to the bottom rung after 4 lapses");
+                    .isEqualTo("send a cell back to the bottom rung after 4 lapses and again every 2 after");
             assertThat(policy().threshold(4).action(LeechAction.TAG).build().describe())
-                    .isEqualTo("flag a cell for review after 4 lapses and change nothing");
+                    .isEqualTo("flag a cell for review after 4 lapses and again every 2 after, changing nothing");
         }
 
         @Test
         void saysWhenItIsCountingConsecutiveLapses() {
             assertThat(policy().threshold(2).consecutiveOnly(true).build().describe())
-                    .isEqualTo("suspend a cell after 2 consecutive lapses");
+                    .isEqualTo("suspend a cell after 2 consecutive lapses and again every 1 after");
+        }
+
+        @Test
+        void roundsHalfAnOddThresholdUp() {
+            assertThat(policy().threshold(5).build().describe())
+                    .isEqualTo("suspend a cell after 5 lapses and again every 3 after");
         }
     }
 }

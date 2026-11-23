@@ -57,15 +57,45 @@ public record LeechPolicy(int threshold, LeechAction action, boolean consecutive
     }
 
     /**
-     * Acts on one cell. The strength that comes back is this very instance whenever the policy left
-     * it alone, which is the case for a cell that is not a leech and for the tag action.
+     * Acts on one cell as it stands, which is what a sweep over a ledger does. The strength that
+     * comes back is this very instance whenever the policy left it alone, which is the case for a
+     * cell that is not a leech and for the tag action.
      */
     public Applied applyTo(CellStrength strength, Ladder ladder, LocalDate on) {
         int lapses = lapseCount(strength);
         if (!isLeech(strength)) {
             return new Applied(strength, new LeechOutcome(strength.cellId(), false, Optional.empty(), lapses));
         }
+        return act(strength, ladder, on, lapses);
+    }
 
+    /**
+     * Acts on a cell one answer has just moved from {@code before} to {@code after}. The policy fires
+     * only when that answer carried the lapse count onto the threshold, or onto one of the points
+     * every {@link #repeatEvery()} lapses past it. A right answer never fires it, and a cell that was
+     * brought back from suspension, demoted or flagged is given that much rope before it is caught
+     * again rather than being caught on its very next lapse. The strength that comes back is {@code
+     * after} itself whenever the policy did not fire or changed nothing.
+     */
+    public Applied applyTo(CellStrength before, CellStrength after, Ladder ladder, LocalDate on) {
+        int lapses = lapseCount(after);
+        boolean fires = !after.suspended() && lapses > lapseCount(before) && isFiringPoint(lapses);
+        if (!fires) {
+            return new Applied(after, new LeechOutcome(after.cellId(), false, Optional.empty(), lapses));
+        }
+        return act(after, ladder, on, lapses);
+    }
+
+    /** How many lapses past the threshold the policy acts again: half the threshold, rounded up. */
+    int repeatEvery() {
+        return Math.ceilDiv(threshold, 2);
+    }
+
+    private boolean isFiringPoint(int lapses) {
+        return lapses >= threshold && (lapses - threshold) % repeatEvery() == 0;
+    }
+
+    private Applied act(CellStrength strength, Ladder ladder, LocalDate on, int lapses) {
         LeechOutcome outcome = new LeechOutcome(strength.cellId(), true, Optional.of(action), lapses);
         return switch (action) {
             case SUSPEND -> new Applied(strength.suspend(), outcome);
@@ -106,10 +136,11 @@ public record LeechPolicy(int threshold, LeechAction action, boolean consecutive
 
     public String describe() {
         String counting = consecutiveOnly ? "consecutive lapses" : "lapses";
+        String after = threshold + " " + counting + " and again every " + repeatEvery() + " after";
         return switch (action) {
-            case SUSPEND -> "suspend a cell after " + threshold + " " + counting;
-            case DEMOTE -> "send a cell back to the bottom rung after " + threshold + " " + counting;
-            case TAG -> "flag a cell for review after " + threshold + " " + counting + " and change nothing";
+            case SUSPEND -> "suspend a cell after " + after;
+            case DEMOTE -> "send a cell back to the bottom rung after " + after;
+            case TAG -> "flag a cell for review after " + after + ", changing nothing";
         };
     }
 

@@ -58,8 +58,9 @@ public final class Review {
      * records the main form as the one expected, and the verdict as marked even when a hint the
      * learner saw keeps a right answer from climbing. A right answer climbs the cell and
      * passes credit to its twins, a near miss holds it at its rung, and a wrong one lapses it; the
-     * leech policy then looks at the cell whatever the verdict. Unless the settings say otherwise,
-     * the cell and its twins are buried for the rest of the sitting, again whatever the verdict.
+     * leech policy then asks whether the answer carried the cell's lapse count onto one of its
+     * firing points. Unless the settings say otherwise, the cell and its twins are buried for the
+     * rest of the sitting, whatever the verdict.
      * The ledger and burial set handed in are left as they were.
      */
     public static ReviewResult answer(
@@ -90,7 +91,7 @@ public final class Review {
 
         MasteryLedger next = ledger.withStrength(after);
 
-        LeechPolicy.Applied leech = settings.leech().applyTo(after, settings.ladder(), on);
+        LeechPolicy.Applied leech = settings.leech().applyTo(before, after, settings.ladder(), on);
         if (leech.outcome().fired() && leech.strength() != after) {
             next = next.withStrength(leech.strength());
         }
