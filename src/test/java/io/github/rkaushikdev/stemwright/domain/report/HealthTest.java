@@ -129,6 +129,45 @@ class HealthTest {
         }
 
         @Test
+        void announcesARevisionTakingEffectWithinFourWeeksAndWhatItChanges() {
+            List<Finding> findings = check(contextOf(), List.of(), CivilDates.parseCivilDate("2025-01-10"));
+            assertThat(messagesFor(findings, "profiles"))
+                    .containsExactly(
+                            "second-neuter revision 2 takes effect on 2025-02-01, changing 0 endings and the twins of 4 bundles");
+            assertThat(findings)
+                    .filteredOn(finding -> finding.area().equals("profiles"))
+                    .extracting(Finding::level)
+                    .containsExactly(FindingLevel.NOTE);
+        }
+
+        @Test
+        void saysNothingOfARevisionFurtherOffThanFourWeeks() {
+            assertThat(messagesFor(check(contextOf(), List.of(), CivilDates.parseCivilDate("2025-01-03")), "profiles"))
+                    .isEmpty();
+            assertThat(messagesFor(check(contextOf(), List.of(), CivilDates.parseCivilDate("2025-01-04")), "profiles"))
+                    .hasSize(1);
+        }
+
+        @Test
+        void countsTheEndingsARevisionRewrites() {
+            RevisionHistory rewritten = RevisionHistory.of(
+                    "first-declension",
+                    List.of(
+                            ProfileRevisionInput.of(CivilDates.parseCivilDate("2024-09-01"), FIRST_DECLENSION),
+                            ProfileRevisionInput.of(
+                                    CivilDates.parseCivilDate("2024-11-01"),
+                                    FIRST_DECLENSION
+                                            .withSlot(LATIN_NOUN, ParadigmSlotInput.of("gen.sg", "ae", "ai"))
+                                            .withSlot(LATIN_NOUN, ParadigmSlotInput.of("abl.sg", "ā")))));
+            ProfileBook book = ProfileBook.of(new ProfileBookInput(
+                    "latin", List.of(rewritten), TestMaps.ordered("first-declension", "first-declension")));
+            assertThat(messagesFor(
+                            check(contextOf(Classes.LATIN, book, Lexicon.build("latin", List.of(PUELLA)))), "profiles"))
+                    .containsExactly(
+                            "first-declension revision 2 takes effect on 2024-11-01, changing 2 endings and the twins of 0 bundles");
+        }
+
+        @Test
         void warnsAboutTwinsDeclaredOneFormThatTheEndingsBuildApart() {
             RevisionHistory overclaimed = RevisionHistory.of(
                     "first-declension",

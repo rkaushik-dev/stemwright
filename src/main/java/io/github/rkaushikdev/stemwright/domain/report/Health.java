@@ -3,13 +3,10 @@ package io.github.rkaushikdev.stemwright.domain.report;
 import io.github.rkaushikdev.stemwright.domain.Grouping;
 import io.github.rkaushikdev.stemwright.domain.lexicon.ClassRegistry;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBook;
-import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileRevision;
-import io.github.rkaushikdev.stemwright.domain.paradigm.RevisionHistory;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * The editorial state of one language, read on a day.
@@ -22,13 +19,11 @@ import java.util.Optional;
  *
  * <p>It takes the day because every one of those answers depends on it, and it takes the
  * memberships already resolved rather than resolving them itself, so a caller cannot check one day
- * and report another. A deck at a tolerance level the language never declared fails the same way
- * one answer later, so it is reported with the rest.
+ * and report another.
  */
 public final class Health {
 
     private static final String CLASSES = "classes";
-    private static final String PROFILES = "profiles";
 
     private Health() {}
 
@@ -41,7 +36,7 @@ public final class Health {
     public static List<Finding> check(HealthInput input) {
         List<Finding> findings = new ArrayList<>();
         checkClasses(input, findings);
-        checkProfiles(input, findings);
+        findings.addAll(ProfileHealth.check(input));
         findings.addAll(LexiconHealth.check(input));
         findings.addAll(DeckHealth.check(input));
         findings.sort(Comparator.comparing(Finding::level));
@@ -61,48 +56,6 @@ public final class Health {
                     FindingLevel.WARNING,
                     CLASSES,
                     "the binding on " + classKey + " is shadowed and can never be reached"));
-        }
-    }
-
-    private static void checkProfiles(HealthInput input, List<Finding> findings) {
-        for (Map.Entry<String, RevisionHistory> entry :
-                input.context().book().histories().entrySet()) {
-            String profileKey = entry.getKey();
-            List<ProfileRevision> revisions = entry.getValue().revisions();
-            if (revisions.isEmpty()) {
-                findings.add(new Finding(FindingLevel.ERROR, PROFILES, profileKey + " holds no revisions at all"));
-                continue;
-            }
-            Optional<ProfileRevision> inForce = entry.getValue().revisionInForce(input.on());
-            if (inForce.isEmpty()) {
-                findings.add(new Finding(
-                        FindingLevel.WARNING,
-                        PROFILES,
-                        profileKey + " has nothing in force on " + input.on() + ", the first starts "
-                                + revisions.getFirst().effectiveFrom()));
-                continue;
-            }
-            checkSyncretism(profileKey, inForce.get(), findings);
-        }
-    }
-
-    /**
-     * A pair the revision declares one form and its endings build differently is a warning, because
-     * burial hides the second cell once the first is answered and the learner never practises an
-     * ending that is not in fact the same. A pair the endings happen to build alike without being
-     * declared is left alone: asking it twice costs a question and hides nothing.
-     */
-    private static void checkSyncretism(String profileKey, ProfileRevision revision, List<Finding> findings) {
-        List<String> unbuilt = revision.syncretism().reconcileWith(revision.profile()).stream()
-                .filter(pair -> pair.declared() && !pair.produced())
-                .map(pair -> pair.first() + " and " + pair.second())
-                .toList();
-        if (!unbuilt.isEmpty()) {
-            findings.add(new Finding(
-                    FindingLevel.WARNING,
-                    PROFILES,
-                    profileKey + " revision " + revision.ordinal() + " declares " + String.join(", ", unbuilt)
-                            + " one form, but its endings build them differently"));
         }
     }
 
