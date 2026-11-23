@@ -10,6 +10,11 @@ import io.github.rkaushikdev.stemwright.app.ApplicationOptions;
 import io.github.rkaushikdev.stemwright.app.Stores;
 import io.github.rkaushikdev.stemwright.domain.drill.Deck;
 import io.github.rkaushikdev.stemwright.domain.drill.DeckInput;
+import io.github.rkaushikdev.stemwright.domain.mastery.CellStrength;
+import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
+import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
+import io.github.rkaushikdev.stemwright.domain.text.Text;
 import io.github.rkaushikdev.stemwright.support.App;
 import io.github.rkaushikdev.stemwright.support.Drill;
 import io.github.rkaushikdev.stemwright.support.Profiles;
@@ -22,8 +27,17 @@ class CommandsTest {
     private static final CommandContext CONTEXT = new CommandContext(line -> {}, App.NOW);
 
     private static Program build() {
+        return over(seeded());
+    }
+
+    /** The seeded stores with the deck {@code all} over the whole language. */
+    private static Stores seeded() {
         Stores stores = App.seededStores();
         stores.decks().put(Deck.of(Profiles.LATIN_NOUN, DeckInput.of("all")));
+        return stores;
+    }
+
+    private static Program over(Stores stores) {
         App.Harness harness = App.testHarness();
         Application app = Application.create(stores, ApplicationOptions.of(harness.bus(), harness.clock()));
         return new Program("stemwright", "1.0.0", Commands.all(app));
@@ -65,6 +79,46 @@ class CommandsTest {
             assertThat(result.code()).isEqualTo(EXIT_OK);
             assertThat(result.output()).contains("bundle");
             assertThat(result.output()).contains("new");
+        }
+
+        @Test
+        void namesTheLexemeOfEachCellAsked() {
+            RunResult result = run(build(), "queue", "--language", "latin", "--deck", "all", "--learner", "lrn_one");
+            assertThat(Text.split(result.output(), "\n").getFirst()).startsWith("lemma");
+            assertThat(result.output()).contains("puella").contains("bellum");
+            assertThat(result.output()).doesNotContain("Left out");
+        }
+
+        @Test
+        void explainsWhyTheRestOfTheDeckWasLeftOut() {
+            RunResult result =
+                    run(build(), "queue", "--language", "latin", "--deck", "all", "--learner", "lrn_one", "--explain");
+            assertThat(result.code()).isEqualTo(EXIT_OK);
+            List<String> lines = Text.split(result.output(), "\n");
+            int asked = lines.indexOf("") - 2;
+            assertThat(asked).isEqualTo(9);
+            assertThat(lines.subList(lines.indexOf("") + 1, lines.size()))
+                    .containsExactly(
+                            "Left out: 21 of 30 cells on 2024-10-21",
+                            "  reason       cells",
+                            "  -----------  -----",
+                            "  lexeme-cap      20",
+                            "  row-spacing      1");
+        }
+
+        @Test
+        void countsASuspendedCellUnderItsOwnReason() {
+            Stores stores = seeded();
+            String genitive = Cell.idFor(Drill.PUELLA.id(), "case=gen;number=sg");
+            stores.ledgers()
+                    .put(MasteryLedger.of(
+                            "lrn_one",
+                            List.of(CellStrength.fresh(genitive)
+                                    .recordLapse(Ladder.STANDARD, App.TODAY)
+                                    .suspend())));
+            RunResult result = run(
+                    over(stores), "queue", "--language", "latin", "--deck", "all", "--learner", "lrn_one", "--explain");
+            assertThat(result.output()).containsPattern("suspended +1");
         }
 
         @Test

@@ -5,7 +5,6 @@ import io.github.rkaushikdev.stemwright.app.LanguageBundle;
 import io.github.rkaushikdev.stemwright.app.Loaders;
 import io.github.rkaushikdev.stemwright.domain.drill.DrillContext;
 import io.github.rkaushikdev.stemwright.domain.drill.Membership;
-import io.github.rkaushikdev.stemwright.domain.drill.Queue;
 import io.github.rkaushikdev.stemwright.domain.lexicon.Lexeme;
 import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
 import io.github.rkaushikdev.stemwright.domain.mastery.LedgerCounts;
@@ -44,34 +43,12 @@ public final class Commands {
 
     private Commands() {}
 
-    /** {@code queue}: the cells a learner would be asked on a day, today unless {@code --on} says. */
+    /**
+     * {@code queue}: the cells a learner would be asked on a day, today unless {@code --on} says,
+     * and with {@code --explain} why the rest were left out.
+     */
     public static Command queue(Application app) {
-        return Command.of(
-                "queue",
-                "show what a learner would be asked today",
-                "stemwright queue --language latin --deck all --learner lrn_one",
-                FlagSpecs.of(
-                        Map.entry("language", Flags.LANGUAGE),
-                        Map.entry("deck", Flags.DECK),
-                        Map.entry("learner", Flags.LEARNER),
-                        Map.entry("on", Flags.DAY)),
-                (args, context) -> {
-                    LocalDate on = Flags.dayFrom(app.clock(), args);
-                    Queue queue = app.drill()
-                            .queue(
-                                    args.requireFlag("learner"),
-                                    args.requireFlag("language"),
-                                    args.requireFlag("deck"),
-                                    on);
-                    return Render.table(
-                            List.of(Column.of("bundle"), Column.of("kind"), Column.of("overdue", Align.RIGHT)),
-                            queue.entries().stream()
-                                    .map(entry -> List.of(
-                                            entry.cell().bundle(),
-                                            entry.kind().key(),
-                                            String.valueOf(entry.overdueDays())))
-                                    .toList());
-                });
+        return QueueCommand.of(app);
     }
 
     /**
