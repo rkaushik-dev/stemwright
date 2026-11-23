@@ -41,15 +41,11 @@ public record LeechPolicy(int threshold, LeechAction action, boolean consecutive
     }
 
     /**
-     * Consecutive counting needs a number the strength record does not keep, so it is reconstructed:
-     * a streak above nought means the last answer was right, and a cell whose last answer was right
-     * has no consecutive lapses at all.
+     * Every lapse the cell has had, or under consecutive counting only those since its latest right
+     * answer. A near miss in between neither breaks the run nor adds to it.
      */
     public int lapseCount(CellStrength strength) {
-        if (!consecutiveOnly) {
-            return strength.lapses();
-        }
-        return strength.streak() > 0 ? 0 : strength.lapses();
+        return consecutiveOnly ? strength.lapseRun() : strength.lapses();
     }
 
     /** True at or past the threshold. A cell that is already suspended is never a leech again. */

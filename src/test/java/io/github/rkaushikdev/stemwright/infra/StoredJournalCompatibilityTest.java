@@ -162,6 +162,7 @@ class StoredJournalCompatibilityTest {
                         2,
                         0,
                         2,
+                        0,
                         Optional.of(THURSDAY),
                         false));
     }

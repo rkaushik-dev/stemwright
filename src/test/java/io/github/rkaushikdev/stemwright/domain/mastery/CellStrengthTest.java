@@ -130,6 +130,29 @@ class CellStrengthTest {
     }
 
     @Nested
+    class LapseRun {
+
+        @Test
+        void growsWithEachLapseAndClearsOnARightAnswer() {
+            CellStrength twice = CellStrength.fresh("c").recordLapse(FLAT, DAY).recordLapse(FLAT, DAY);
+            assertThat(twice.lapseRun()).isEqualTo(2);
+            CellStrength recovered = twice.recordCorrect(FLAT, DAY);
+            assertThat(recovered.lapseRun()).isZero();
+            assertThat(recovered.lapses()).isEqualTo(2);
+            assertThat(recovered.recordLapse(FLAT, DAY).lapseRun()).isEqualTo(1);
+        }
+
+        @Test
+        void isLeftAloneByANearMissAndByEveryChangeOfSchedule() {
+            CellStrength lapsed = CellStrength.fresh("c").recordLapse(FLAT, DAY);
+            assertThat(lapsed.recordNearMiss(FLAT, DAY).lapseRun()).isEqualTo(1);
+            assertThat(lapsed.suspend().lapseRun()).isEqualTo(1);
+            assertThat(lapsed.suspend().unsuspend(FLAT, DAY).lapseRun()).isEqualTo(1);
+            assertThat(lapsed.deferTo(d("2025-04-01")).lapseRun()).isEqualTo(1);
+        }
+    }
+
+    @Nested
     class IsDueAndDaysOverdue {
 
         private final CellStrength seen = CellStrength.fresh("cell_a").recordCorrect(FLAT, DAY);

@@ -40,6 +40,7 @@ class CreditRuleTest {
                 strength.correct(),
                 strength.lapses(),
                 strength.streak(),
+                strength.lapseRun(),
                 strength.lastSeenOn(),
                 strength.suspended());
     }

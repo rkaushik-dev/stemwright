@@ -101,7 +101,11 @@ public final class Records {
         }
     }
 
-    /** Every field of the strength, and its dates only when it has them. */
+    /**
+     * Every field of the strength, its dates only when it has them, and its lapse run only when the
+     * streak and the lapses would not give it back. A row written before the run was kept therefore
+     * re-encodes to the bytes it was read from.
+     */
     public static JsonObject encodeStrength(CellStrength strength) {
         return Json.object()
                 .put("cellId", strength.cellId())
@@ -110,6 +114,11 @@ public final class Records {
                 .put("correct", strength.correct())
                 .put("lapses", strength.lapses())
                 .put("streak", strength.streak())
+                .putIfPresent(
+                        "lapseRun",
+                        Optional.of(strength.lapseRun())
+                                .filter(run -> run != legacyLapseRun(strength.streak(), strength.lapses()))
+                                .map(run -> Json.of((long) run)))
                 .put("suspended", strength.suspended())
                 .putIfPresent("dueOn", strength.dueOn().map(Records::date))
                 .putIfPresent("lastSeenOn", strength.lastSeenOn().map(Records::date))
@@ -122,8 +131,9 @@ public final class Records {
     }
 
     /**
-     * Reads a strength back, refusing a count that is not a whole number at or above zero and more
-     * correct answers than sightings, each under {@code path}.
+     * Reads a strength back, refusing a count that is not a whole number at or above zero, more
+     * correct answers than sightings and a lapse run longer than the lapses, each under {@code path}.
+     * A row with no lapse run takes the one its streak and lapses imply.
      *
      * @throws ValidationException when the row is not a usable strength
      */
@@ -139,9 +149,23 @@ public final class Records {
         Optional<LocalDate> dueOn = Codec.readOptionalDate(row, path, "dueOn");
         int lapses = readCount(row, path, "lapses");
         int streak = readCount(row, path, "streak");
+        int lapseRun =
+                row.get("lapseRun").isPresent() ? readCount(row, path, "lapseRun") : legacyLapseRun(streak, lapses);
+        if (lapseRun > lapses) {
+            throw ValidationException.field(path + ".lapseRun", "is longer than the number of lapses");
+        }
         Optional<LocalDate> lastSeenOn = Codec.readOptionalDate(row, path, "lastSeenOn");
         boolean suspended = Codec.readBoolean(row, path, "suspended");
-        return new CellStrength(cellId, rung, dueOn, seen, correct, lapses, streak, lastSeenOn, suspended);
+        return new CellStrength(cellId, rung, dueOn, seen, correct, lapses, streak, lapseRun, lastSeenOn, suspended);
+    }
+
+    /**
+     * The lapse run a row is read as when it does not carry one, which is how the run was worked out
+     * before it was kept: a streak above nought means the latest answer was right and the run is
+     * over, and otherwise every lapse is taken to be in it.
+     */
+    private static int legacyLapseRun(int streak, int lapses) {
+        return streak > 0 ? 0 : lapses;
     }
 
     /**

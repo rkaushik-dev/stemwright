@@ -144,6 +144,36 @@ class RecordsTest {
         }
 
         @Test
+        void writesTheLapseRunOnlyWhenTheStreakWouldNotGiveItBack() {
+            CellStrength relapsed = seen.recordLapse(FLAT, DAY)
+                    .recordLapse(FLAT, DAY)
+                    .recordCorrect(FLAT, DAY)
+                    .recordLapse(FLAT, DAY);
+            assertThat(Records.encodeStrength(seen).get("lapseRun")).isEmpty();
+            assertThat(Records.encodeStrength(seen.recordLapse(FLAT, DAY)).get("lapseRun"))
+                    .isEmpty();
+            assertThat(Records.encodeStrength(relapsed).get("lapseRun")).contains(Json.of(1));
+            assertThat(Records.decodeStrength(Records.encodeStrength(relapsed))).isEqualTo(relapsed);
+        }
+
+        @Test
+        void readsARowWithNoLapseRunTheWayItUsedToBeWorkedOut() {
+            JsonObject older =
+                    Records.encodeStrength(seen).with("lapses", Json.of(3)).with("streak", Json.of(0));
+            assertThat(Records.decodeStrength(older).lapseRun()).isEqualTo(3);
+            assertThat(Records.decodeStrength(older.with("streak", Json.of(2))).lapseRun())
+                    .isZero();
+        }
+
+        @Test
+        void refusesALapseRunLongerThanTheLapses() {
+            JsonObject encoded = Records.encodeStrength(seen).with("lapseRun", Json.of(2));
+            assertThatThrownBy(() -> Records.decodeStrength(encoded))
+                    .isInstanceOf(ValidationException.class)
+                    .hasMessageContaining("lapseRun");
+        }
+
+        @Test
         void refusesAFractionalRung() {
             JsonObject encoded = Records.encodeStrength(seen).with("rung", Json.of(1.5));
             assertThatThrownBy(() -> Records.decodeStrength(encoded)).isInstanceOf(ValidationException.class);

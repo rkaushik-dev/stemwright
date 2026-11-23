@@ -25,6 +25,8 @@ import java.util.Optional;
  * @param correct how many of those answers were right
  * @param lapses how many of those answers were wrong
  * @param streak how many answers in a row were right, up to the latest
+ * @param lapseRun how many lapses since the latest right answer, which a near miss neither adds to
+ *     nor clears
  * @param lastSeenOn the day of the latest answer, absent for a cell that has never been answered
  * @param suspended whether the cell is out of the queue until somebody brings it back
  */
@@ -36,6 +38,7 @@ public record CellStrength(
         int correct,
         int lapses,
         int streak,
+        int lapseRun,
         Optional<LocalDate> lastSeenOn,
         boolean suspended) {
 
@@ -47,7 +50,7 @@ public record CellStrength(
 
     /** A cell nobody has answered: unseen, unscheduled and at the bottom rung. */
     public static CellStrength fresh(String cellId) {
-        return new CellStrength(cellId, 0, Optional.empty(), 0, 0, 0, 0, Optional.empty(), false);
+        return new CellStrength(cellId, 0, Optional.empty(), 0, 0, 0, 0, 0, Optional.empty(), false);
     }
 
     public boolean isIntroduced() {
@@ -76,24 +79,12 @@ public record CellStrength(
     /** Climbs a rung, except on the first sighting, and schedules from the spread interval. */
     public CellStrength recordCorrect(Ladder ladder, LocalDate on) {
         int next = isIntroduced() ? ladder.climb(rung) : rung;
-        LocalDate due = CivilDates.addDays(on, ladder.spreadInterval(next, cellId));
-        return new CellStrength(
-                cellId, next, Optional.of(due), seen + 1, correct + 1, lapses, streak + 1, Optional.of(on), suspended);
+        return sighted(on, next, ladder.spreadInterval(next, cellId), Sighting.RIGHT);
     }
 
     /** Drops by the ladder's lapse and comes back after the shortest interval. */
     public CellStrength recordLapse(Ladder ladder, LocalDate on) {
-        LocalDate due = CivilDates.addDays(on, ladder.intervalAt(0));
-        return new CellStrength(
-                cellId,
-                ladder.lapse(rung),
-                Optional.of(due),
-                seen + 1,
-                correct,
-                lapses + 1,
-                0,
-                Optional.of(on),
-                suspended);
+        return sighted(on, ladder.lapse(rung), ladder.intervalAt(0), Sighting.LAPSE);
     }
 
     /**
@@ -102,13 +93,28 @@ public record CellStrength(
      * rewarding or punishing it.
      */
     public CellStrength recordNearMiss(Ladder ladder, LocalDate on) {
-        LocalDate due = CivilDates.addDays(on, ladder.intervalAt(0));
+        return sighted(on, rung, ladder.intervalAt(0), Sighting.NEAR);
+    }
+
+    /** The cell answered on the day, placed at the rung and due the given number of days later. */
+    private CellStrength sighted(LocalDate on, int nextRung, int interval, Sighting sighting) {
+        boolean right = sighting == Sighting.RIGHT;
+        boolean lapsed = sighting == Sighting.LAPSE;
         return new CellStrength(
-                cellId, rung, Optional.of(due), seen + 1, correct, lapses, 0, Optional.of(on), suspended);
+                cellId,
+                nextRung,
+                Optional.of(CivilDates.addDays(on, interval)),
+                seen + 1,
+                right ? correct + 1 : correct,
+                lapsed ? lapses + 1 : lapses,
+                right ? streak + 1 : 0,
+                right ? 0 : lapsed ? lapseRun + 1 : lapseRun,
+                Optional.of(on),
+                suspended);
     }
 
     public CellStrength suspend() {
-        return new CellStrength(cellId, rung, dueOn, seen, correct, lapses, streak, lastSeenOn, true);
+        return held(rung, dueOn, true);
     }
 
     /** Brings a suspended cell back, scheduled from the rung it kept; any other cell is left alone. */
@@ -116,8 +122,7 @@ public record CellStrength(
         if (!suspended) {
             return this;
         }
-        LocalDate due = CivilDates.addDays(on, ladder.intervalAt(rung));
-        return new CellStrength(cellId, rung, Optional.of(due), seen, correct, lapses, streak, lastSeenOn, false);
+        return held(rung, Optional.of(CivilDates.addDays(on, ladder.intervalAt(rung))), false);
     }
 
     /**
@@ -129,13 +134,17 @@ public record CellStrength(
         if (dueOn.filter(due -> due.isBefore(on)).isEmpty()) {
             return this;
         }
-        return new CellStrength(cellId, rung, Optional.of(on), seen, correct, lapses, streak, lastSeenOn, suspended);
+        return held(rung, Optional.of(on), suspended);
     }
 
     /** The same cell placed at another rung and due on another day, with its counts untouched. */
     CellStrength withSchedule(int nextRung, LocalDate due) {
-        return new CellStrength(
-                cellId, nextRung, Optional.of(due), seen, correct, lapses, streak, lastSeenOn, suspended);
+        return held(nextRung, Optional.of(due), suspended);
+    }
+
+    /** The same counts and the same latest sighting under another schedule. */
+    private CellStrength held(int nextRung, Optional<LocalDate> due, boolean out) {
+        return new CellStrength(cellId, nextRung, due, seen, correct, lapses, streak, lapseRun, lastSeenOn, out);
     }
 
     public boolean isMature(Ladder ladder) {
@@ -149,5 +158,12 @@ public record CellStrength(
         // Past the suspension check, a cell without a due date is exactly a new one.
         return dueOn.map(due -> "rung " + rung + " of " + (ladder.rungs().size() - 1) + ", next on " + due)
                 .orElse("not introduced yet");
+    }
+
+    /** How one answer went, as far as the counts are concerned. */
+    private enum Sighting {
+        RIGHT,
+        NEAR,
+        LAPSE
     }
 }

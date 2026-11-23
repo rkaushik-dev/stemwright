@@ -77,10 +77,31 @@ class LeechPolicyTest {
         }
 
         @Test
-        void countsThemAgainWhenTheStreakBreaks() {
+        void countsOnlyTheLapsesSinceTheStreakBroke() {
             CellStrength relapsed = strength.recordCorrect(FLAT, DAY).recordLapse(FLAT, DAY);
             assertThat(policy().consecutiveOnly(true).build().lapseCount(relapsed))
+                    .isEqualTo(1);
+            assertThat(policy().build().lapseCount(relapsed)).isEqualTo(5);
+        }
+
+        @Test
+        void keepsTheRunThroughANearMissWithoutAddingToIt() {
+            CellStrength nearly = strength.recordNearMiss(FLAT, DAY);
+            assertThat(policy().consecutiveOnly(true).build().lapseCount(nearly))
+                    .isEqualTo(4);
+            assertThat(policy().consecutiveOnly(true).build().lapseCount(nearly.recordLapse(FLAT, DAY)))
                     .isEqualTo(5);
+        }
+
+        @Test
+        void doesNotSuspendARecoveredCellOnItsFirstLapseBack() {
+            LeechPolicy consecutive =
+                    policy().threshold(3).consecutiveOnly(true).build();
+            CellStrength relapsed =
+                    lapsedTimes("cell_b", 3).recordCorrect(FLAT, DAY).recordLapse(FLAT, DAY);
+            assertThat(consecutive.isLeech(relapsed)).isFalse();
+            assertThat(consecutive.isLeech(relapsed.recordLapse(FLAT, DAY).recordLapse(FLAT, DAY)))
+                    .isTrue();
         }
     }
 
