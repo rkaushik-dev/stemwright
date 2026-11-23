@@ -116,9 +116,9 @@ public record MatchResult(
         return switch (verdict) {
             case EXACT -> "right";
             case TOLERATED ->
-                miss.map(kind -> "right, and the " + kind.key() + " is not marked at this tolerance")
+                miss.map(kind -> "right, and the " + kind.phrase() + " is not marked at this tolerance")
                         .orElse("right, with a difference the deck ignores");
-            case NEAR -> "not quite, the " + miss.map(MissKind::key).orElse("form") + " is off by " + distance;
+            case NEAR -> "not quite, the " + miss.map(MissKind::phrase).orElse("form") + " is off by " + distance;
             case WRONG -> "wrong, the expected form was " + expected;
         };
     }

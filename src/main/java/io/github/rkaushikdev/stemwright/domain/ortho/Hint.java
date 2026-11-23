@@ -83,7 +83,7 @@ public record Hint(HintLevel level, String text, int revealed) {
                 int at = Distance.firstDivergence(result.expected(), result.given())
                         .map(divergence -> divergence.index() + 1)
                         .orElse(clusters.size());
-                String miss = result.miss().map(MissKind::key).orElse("form");
+                String miss = result.miss().map(MissKind::phrase).orElse("form");
                 yield new Hint(level, "the " + miss + " is wrong, from letter " + at, 0);
             }
             case REVEAL -> new Hint(level, result.expected(), clusters.size());

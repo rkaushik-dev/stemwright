@@ -97,6 +97,32 @@ class MatchResultTest {
         }
 
         @Test
+        void namesAMissingLongMarkAsLengthRatherThanAnAccent() {
+            assertThat(MissKind.classify("puellā", "puella")).isEqualTo(MissKind.LENGTH);
+            assertThat(MissKind.classify("rosă", "rosa")).isEqualTo(MissKind.LENGTH);
+            assertThat(MissKind.classify("rosa", "rosā")).isEqualTo(MissKind.LENGTH);
+        }
+
+        @Test
+        void keepsAnAccentAnAccentWhenALongMarkIsMissingBesideIt() {
+            assertThat(MissKind.classify("ᾱ̓́νθρωπος", "ανθρωπος")).isEqualTo(MissKind.ACCENT);
+            assertThat(MissKind.classify("ᾱ", "α")).isEqualTo(MissKind.LENGTH);
+        }
+
+        @Test
+        void asksAboutCapitalsBeforeLength() {
+            assertThat(MissKind.classify("Rōma", "rōma")).isEqualTo(MissKind.CAPITAL);
+        }
+
+        @Test
+        void readsEveryKindBackFromItsKey() {
+            for (MissKind kind : MissKind.values()) {
+                assertThat(MissKind.fromKey(kind.key())).contains(kind);
+            }
+            assertThat(MissKind.fromKey("macron")).isEmpty();
+        }
+
+        @Test
         void namesSpacing() {
             assertThat(MissKind.classify("in urbe", "inurbe")).isEqualTo(MissKind.SPACING);
         }
@@ -170,6 +196,14 @@ class MatchResultTest {
         void namesWhatTheToleranceLetThrough() {
             assertThat(compareForm("Puella", "puella", LATIN_STANDARD).describe())
                     .isEqualTo("right, and the capital is not marked at this tolerance");
+        }
+
+        @Test
+        void callsAMissingMacronTheVowelLength() {
+            assertThat(compareForm("puellā", "puella", LATIN_STANDARD).describe())
+                    .isEqualTo("right, and the vowel length is not marked at this tolerance");
+            assertThat(compareForm("puellā", "puella", EXACT).describe())
+                    .isEqualTo("not quite, the vowel length is off by 1");
         }
 
         @Test

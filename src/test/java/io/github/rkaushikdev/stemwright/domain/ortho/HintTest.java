@@ -112,6 +112,12 @@ class HintTest {
         }
 
         @Test
+        void pointsAtTheVowelWhoseLongMarkWasLeftOut() {
+            MatchResult unmarked = MatchResult.compareForm("puellās", "puellas", EXACT);
+            assertThat(Hint.of(unmarked, HintLevel.KIND).text()).isEqualTo("the vowel length is wrong, from letter 6");
+        }
+
+        @Test
         void givesTheFormAtTheRevealLevel() {
             Hint hint = Hint.of(WRONG_ENDING, HintLevel.REVEAL);
             assertThat(hint.text()).isEqualTo("puellarum");
