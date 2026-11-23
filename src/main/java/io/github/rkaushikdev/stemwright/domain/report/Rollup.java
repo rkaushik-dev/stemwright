@@ -4,10 +4,13 @@ import io.github.rkaushikdev.stemwright.domain.Grouping;
 import io.github.rkaushikdev.stemwright.domain.mastery.Attempt;
 import io.github.rkaushikdev.stemwright.domain.mastery.AttemptTally;
 import io.github.rkaushikdev.stemwright.domain.text.Collation;
+import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,14 +38,30 @@ public final class Rollup {
 
     private Rollup() {}
 
-    /** One row for every day of the range, in order, with a zero row for a day with no attempts. */
+    /**
+     * One row for every day of the range, in order, with a zero row for a day with no attempts. The
+     * attempts may run from before the range: they are what tells a review from a first sighting,
+     * and only the ones inside the range are counted.
+     */
     public static List<DayRollup> daily(List<Attempt> attempts, DayRange range) {
         Map<LocalDate, List<Attempt>> byDay = Grouping.groupBy(inRange(attempts, range), Attempt::on);
+        Map<String, LocalDate> firstSeen = new HashMap<>();
+        attempts.forEach(entry -> firstSeen.merge(entry.cellId(), entry.on(), CivilDates::minCivil));
         return range.eachDay()
                 .map(day -> {
-                    List<Attempt> forDay = byDay.getOrDefault(day, List.of());
+                    List<Attempt> forDay = byDay.getOrDefault(day, List.of()).stream()
+                            .sorted(BY_DAY_THEN_SEQUENCE)
+                            .toList();
                     AttemptTally tallied = AttemptTally.of(forDay);
-                    return new DayRollup(day, tallied, tallied.accuracy(), distinct(forDay, Attempt::cellId));
+                    Map<String, Attempt> firstOfDay = new LinkedHashMap<>();
+                    forDay.forEach(entry -> firstOfDay.putIfAbsent(entry.cellId(), entry));
+                    List<Attempt> reviewed = firstOfDay.values().stream()
+                            .filter(entry -> firstSeen.get(entry.cellId()).isBefore(day))
+                            .toList();
+                    int retained =
+                            (int) reviewed.stream().filter(Attempt::wasCorrect).count();
+                    return new DayRollup(
+                            day, tallied, tallied.accuracy(), firstOfDay.size(), reviewed.size(), retained);
                 })
                 .toList();
     }

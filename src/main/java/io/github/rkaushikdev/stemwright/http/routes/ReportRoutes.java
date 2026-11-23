@@ -102,6 +102,8 @@ public final class ReportRoutes {
                                                 .put("answers", day.tally().total())
                                                 .put("correct", day.tally().correct())
                                                 .put("accuracy", day.accuracy())
+                                                .put("reviews", day.reviews())
+                                                .put("retained", day.retained())
                                                 .build())
                                         .toList()))
                         .put(
@@ -113,6 +115,7 @@ public final class ReportRoutes {
                                                 .put("accuracy", row.accuracy())
                                                 .build())
                                         .toList()))
+                        .put("retention", report.retention())
                         .build());
     }
 

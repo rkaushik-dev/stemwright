@@ -9,6 +9,7 @@ import io.github.rkaushikdev.stemwright.domain.ortho.MatchVerdict;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Nested;
@@ -103,6 +104,31 @@ class RollupTest {
         void isZeroRatherThanUndefinedOnADayWithNothing() {
             List<DayRollup> rows = Rollup.daily(attempts, r("2025-03-04", "2025-03-04"));
             assertThat(rows.get(0).accuracy()).isEqualTo(0.0);
+        }
+
+        @Test
+        void countsACellSeenOnAnEarlierDayAsAReviewAndJudgesItByItsFirstAnswer() {
+            List<DayRollup> rows = Rollup.daily(attempts, r("2025-03-05", "2025-03-05"));
+            assertThat(rows.get(0).reviews()).isEqualTo(1);
+            assertThat(rows.get(0).retained()).isZero();
+        }
+
+        @Test
+        void callsARightFirstAnswerToAReviewRetained() {
+            List<Attempt> log = new ArrayList<>(attempts);
+            log.add(make(input -> input.on(d("2025-03-05")).cellId("cell_a").verdict(MatchVerdict.TOLERATED)));
+            List<DayRollup> rows = Rollup.daily(log, r("2025-03-03", "2025-03-05"));
+            assertThat(rows.stream().map(DayRollup::reviews)).containsExactly(0, 0, 2);
+            assertThat(rows.stream().map(DayRollup::retained)).containsExactly(0, 0, 1);
+        }
+
+        @Test
+        void readsTheLogBeforeTheRangeToTellAReviewFromAFirstSighting() {
+            List<DayRollup> later = Rollup.daily(attempts, r("2025-03-04", "2025-03-05"));
+            assertThat(later.get(1).reviews()).isEqualTo(1);
+            List<DayRollup> cut = Rollup.daily(
+                    Rollup.inRange(attempts, r("2025-03-05", "2025-03-05")), r("2025-03-05", "2025-03-05"));
+            assertThat(cut.get(0).reviews()).isZero();
         }
 
         @Test

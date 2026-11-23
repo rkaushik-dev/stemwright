@@ -162,6 +162,35 @@ class ReportServiceTest {
         }
 
         @Test
+        void measuresRetentionOverTheReviewsAloneReadingTheLogBeforeTheRange() {
+            Built built = build();
+            Cell target = drillOnce(built.drill());
+            String expected = built.drill()
+                    .answer(
+                            AnswerRequest.of("lrn_one", "latin", "all", target.id(), "x")
+                                    .withOn(DAY),
+                            SETTINGS)
+                    .review()
+                    .expected();
+            built.drill()
+                    .answer(
+                            AnswerRequest.of("lrn_one", "latin", "all", target.id(), expected)
+                                    .withOn(DAY.plusDays(1)),
+                            SETTINGS);
+
+            ActivityReport within = built.service().activity(STUDENT, SCOPE, "lrn_one", r("2024-10-21", "2024-10-23"));
+            ActivityReport after = built.service().activity(STUDENT, SCOPE, "lrn_one", r("2024-10-22", "2024-10-23"));
+            ActivityReport before = built.service().activity(STUDENT, SCOPE, "lrn_one", r("2024-10-21", "2024-10-21"));
+
+            assertThat(within.retention()).isEqualTo(1);
+            assertThat(within.days().get(1).reviews()).isEqualTo(1);
+            assertThat(after.retention()).isEqualTo(1);
+            assertThat(after.hardest()).isEmpty();
+            assertThat(before.retention()).isZero();
+            assertThat(before.days().getFirst().tally().total()).isEqualTo(2);
+        }
+
+        @Test
         void namesACellThatWasGotWrong() {
             Built built = build();
             Cell target = drillOnce(built.drill());

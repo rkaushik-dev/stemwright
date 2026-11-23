@@ -18,6 +18,7 @@ import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.report.CohortReport;
 import io.github.rkaushikdev.stemwright.domain.report.Coverage;
 import io.github.rkaushikdev.stemwright.domain.report.CoverageRow;
+import io.github.rkaushikdev.stemwright.domain.report.DayRollup;
 import io.github.rkaushikdev.stemwright.domain.report.Forecast;
 import io.github.rkaushikdev.stemwright.domain.report.Rollup;
 import io.github.rkaushikdev.stemwright.domain.time.DayRange;
@@ -103,15 +104,26 @@ public final class ReportService {
     }
 
     /**
-     * What the learner answered over the range, day by day, and the cells they found hardest.
+     * What the learner answered over the range, day by day, the cells they found hardest, and how
+     * many of the reviews they recalled. The log before the range is read too, because it is what
+     * tells a review from a cell met for the first time.
      *
      * @throws ForbiddenException when the actor may not read the learner's work on the course
      */
     public ActivityReport activity(Actor actor, CourseScope scope, String learnerId, DayRange range) {
         actor.requireReadLearner(learnerId, scope);
-        List<Attempt> attempts = stores.attempts().listByLearner(learnerId, range);
+        List<Attempt> log = stores.attempts().listByLearner(learnerId).stream()
+                .filter(entry -> !entry.on().isAfter(range.to()))
+                .toList();
+        List<DayRollup> days = Rollup.daily(log, range);
+        int reviews = days.stream().mapToInt(DayRollup::reviews).sum();
+        int retained = days.stream().mapToInt(DayRollup::retained).sum();
         return new ActivityReport(
-                learnerId, range, Rollup.daily(attempts, range), Rollup.hardestCells(Rollup.byCell(attempts)));
+                learnerId,
+                range,
+                days,
+                Rollup.hardestCells(Rollup.byCell(Rollup.inRange(log, range))),
+                reviews == 0 ? 0 : (double) retained / reviews);
     }
 
     /** The cohort report over the progress rows, dated today. */

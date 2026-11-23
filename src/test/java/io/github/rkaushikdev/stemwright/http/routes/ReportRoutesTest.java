@@ -134,7 +134,9 @@ class ReportRoutesTest {
             Router handle = build().handle();
             HttpResponse response = handle.handle(
                     makeRequest(Method.GET, ACTIVITY, token("tok-student").withQuery(WINDOW)));
-            assertThat(itemsAt(response.body(), "days")).hasSize(7);
+            assertThat(itemsAt(response.body(), "days")).hasSize(7).allSatisfy(day -> assertThat(
+                            ((JsonObject) day).keys())
+                    .containsExactly("on", "answers", "correct", "accuracy", "reviews", "retained"));
             assertThat(itemsAt(response.body(), "hardest")).isEmpty();
         }
 
@@ -156,6 +158,9 @@ class ReportRoutesTest {
                     .handle(makeRequest(
                             Method.GET, ACTIVITY, token("tok-student").withQuery(WINDOW)));
             assertThat(numberAt(response.body(), "days.0.answers")).isEqualTo(1);
+            assertThat(numberAt(response.body(), "days.0.reviews")).isZero();
+            assertThat(numberAt(response.body(), "days.0.retained")).isZero();
+            assertThat(numberAt(response.body(), "retention")).isZero();
             assertThat(itemsAt(response.body(), "hardest")).hasSize(1);
         }
 
