@@ -76,9 +76,28 @@ public record CellStrength(
         return seen == 0 ? 0 : (double) correct / seen;
     }
 
-    /** Climbs a rung, except on the first sighting, and schedules from the spread interval. */
+    /**
+     * Climbs by the gap the learner actually held the form over, and schedules from the spread
+     * interval of the rung it lands on.
+     *
+     * <p>A cell answered on the day it comes due climbs one rung. One answered late has been held
+     * for longer than its interval, so it goes up to the highest rung whose interval that gap covers
+     * when that is further than one rung. One answered early, on a later day than it was last seen
+     * but before it was due, has been held for less, so it keeps its rung and is never brought
+     * forward. The first sighting does not climb, and nor does a second sighting on the same day,
+     * which says nothing about how long the form is held.
+     */
     public CellStrength recordCorrect(Ladder ladder, LocalDate on) {
-        int next = isIntroduced() ? ladder.climb(rung) : rung;
+        if (!isIntroduced()) {
+            return sighted(on, rung, ladder.spreadInterval(rung, cellId), Sighting.RIGHT);
+        }
+        int gap = lastSeenOn.map(seenOn -> CivilDates.daysBetween(seenOn, on)).orElse(0);
+        if (gap > 0 && dueOn.filter(on::isBefore).isPresent()) {
+            LocalDate due = CivilDates.maxCivil(
+                    dueOn.orElseThrow(), CivilDates.addDays(on, ladder.spreadInterval(rung, cellId)));
+            return sighted(on, rung, CivilDates.daysBetween(on, due), Sighting.RIGHT);
+        }
+        int next = Math.max(ladder.climb(rung), ladder.rungHeldFor(gap));
         return sighted(on, next, ladder.spreadInterval(next, cellId), Sighting.RIGHT);
     }
 

@@ -18,6 +18,7 @@ import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -195,6 +196,27 @@ class ForecastTest {
                     policy(patch().newPerDay(0)),
                     r("2024-10-01", "2024-10-03"));
             assertThat(days.stream().map(ProjectionDay::reviews)).containsExactly(0, 1, 0);
+        }
+
+        @Test
+        void climbsACellAlreadyOverdueByTheGapItWasHeldOver() {
+            Cell nominative = cellOf("case=nom;number=sg");
+            CellStrength held = CellStrength.fresh(nominative.id())
+                    .recordCorrect(FLAT, d("2024-09-01"))
+                    .recordCorrect(FLAT, d("2024-09-02"));
+            List<ProjectionDay> days = Forecast.optimisticProjection(
+                    List.of(nominative),
+                    MasteryLedger.of("lrn_one", List.of(held)),
+                    FLAT,
+                    policy(patch().newPerDay(0)),
+                    r("2024-10-01", "2024-10-25"));
+            List<Integer> reviewed = new ArrayList<>();
+            for (int index = 0; index < days.size(); index += 1) {
+                if (days.get(index).reviews() > 0) {
+                    reviewed.add(index);
+                }
+            }
+            assertThat(reviewed).containsExactly(0, 16);
         }
     }
 

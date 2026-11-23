@@ -67,6 +67,43 @@ class CellStrengthTest {
         }
 
         @Test
+        void climbsALateAnswerToTheRungTheGapItWasHeldOverCovers() {
+            CellStrength second =
+                    CellStrength.fresh("cell_a").recordCorrect(FLAT, DAY).recordCorrect(FLAT, d("2025-03-04"));
+            CellStrength late = second.recordCorrect(FLAT, d("2025-03-24"));
+            assertThat(late.rung()).isEqualTo(3);
+            assertThat(late.dueOn()).contains(d("2025-04-09"));
+        }
+
+        @Test
+        void climbsOneRungWhenTheGapCoversNoMore() {
+            CellStrength second =
+                    CellStrength.fresh("cell_a").recordCorrect(FLAT, DAY).recordCorrect(FLAT, d("2025-03-04"));
+            assertThat(second.recordCorrect(FLAT, d("2025-03-07")).rung()).isEqualTo(2);
+            assertThat(second.recordCorrect(FLAT, d("2025-03-09")).rung()).isEqualTo(2);
+        }
+
+        @Test
+        void holdsTheRungOfAnAnswerGivenOnALaterDayBeforeItWasDue() {
+            CellStrength second =
+                    CellStrength.fresh("cell_a").recordCorrect(FLAT, DAY).recordCorrect(FLAT, d("2025-03-04"));
+            CellStrength early = second.recordCorrect(FLAT, d("2025-03-05"));
+            assertThat(early.rung()).isEqualTo(1);
+            assertThat(early.dueOn()).contains(d("2025-03-08"));
+            assertThat(early.correct()).isEqualTo(3);
+            assertThat(early.streak()).isEqualTo(3);
+        }
+
+        @Test
+        void neverBringsADeferredDueDateForwardOnAnEarlyAnswer() {
+            CellStrength deferred = CellStrength.fresh("cell_a")
+                    .recordCorrect(FLAT, DAY)
+                    .recordCorrect(FLAT, d("2025-03-04"))
+                    .deferTo(d("2025-03-20"));
+            assertThat(deferred.recordCorrect(FLAT, d("2025-03-05")).dueOn()).contains(d("2025-03-20"));
+        }
+
+        @Test
         void recordsTheDayItWasLastSeen() {
             assertThat(CellStrength.fresh("cell_a").recordCorrect(FLAT, DAY).lastSeenOn())
                     .contains(d("2025-03-03"));

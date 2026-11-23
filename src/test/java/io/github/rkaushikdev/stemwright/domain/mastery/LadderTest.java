@@ -143,6 +143,16 @@ class LadderTest {
         }
 
         @Test
+        void findsTheHighestRungAGapCovers() {
+            assertThat(STANDARD.rungHeldFor(0)).isZero();
+            assertThat(STANDARD.rungHeldFor(2)).isZero();
+            assertThat(STANDARD.rungHeldFor(3)).isEqualTo(1);
+            assertThat(STANDARD.rungHeldFor(34)).isEqualTo(3);
+            assertThat(STANDARD.rungHeldFor(35)).isEqualTo(4);
+            assertThat(STANDARD.rungHeldFor(10_000)).isEqualTo(STANDARD.topRung());
+        }
+
+        @Test
         void stopsClimbingAtTheTop() {
             assertThat(STANDARD.climb(7)).isEqualTo(7);
             assertThat(STANDARD.isAtTop(7)).isTrue();

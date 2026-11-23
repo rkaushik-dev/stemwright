@@ -110,6 +110,17 @@ public record Ladder(String key, String label, List<Integer> rungs, int lapseDro
         return rungs.get(clampRung(rung));
     }
 
+    /** The highest rung whose interval is no longer than the days given, nought below the first. */
+    int rungHeldFor(int days) {
+        int held = 0;
+        for (int index = 0; index < rungs.size(); index += 1) {
+            if (rungs.get(index) <= days) {
+                held = index;
+            }
+        }
+        return held;
+    }
+
     public int climb(int rung) {
         return clamp(rung + 1L);
     }

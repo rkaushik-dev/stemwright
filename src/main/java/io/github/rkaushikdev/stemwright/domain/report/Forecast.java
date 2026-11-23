@@ -8,6 +8,7 @@ import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -21,8 +22,8 @@ import java.util.Optional;
  * right.
  *
  * <p>The optimistic projection does pretend, and says so in its name. It assumes every review is
- * answered correctly on the day it falls due and follows the ladder forward, which gives the
- * lightest possible future and is useful only as a floor.
+ * answered correctly on the day it falls due and schedules it the way a right answer is scheduled,
+ * which gives the lightest possible future and is useful only as a floor.
  */
 public final class Forecast {
 
@@ -77,14 +78,17 @@ public final class Forecast {
     }
 
     /**
-     * Walks forward assuming every answer is right, introducing new cells at the policy budget. Each
-     * cell is followed along the ladder, so the shape of the curve comes from the rungs rather than
-     * from a decay model. A rest day does nothing at all, and a suspended cell takes no part.
+     * Walks forward assuming every answer is right, introducing new cells at the policy budget in the
+     * order given. Each review is answered on the first day it is due and scheduled exactly as a
+     * right answer is, by {@link CellStrength#recordCorrect}, so a cell already overdue when the
+     * range starts climbs by the gap it was held over and the curve takes its shape from the rungs
+     * rather than from a decay model. A rest day does nothing at all, and a suspended cell takes no
+     * part.
      */
     public static List<ProjectionDay> optimisticProjection(
             List<Cell> cells, MasteryLedger ledger, Ladder ladder, DrillPolicy policy, DayRange range) {
-        List<Pending> pending = new ArrayList<>();
-        int untouched = 0;
+        List<CellStrength> pending = new ArrayList<>();
+        ArrayDeque<String> unseen = new ArrayDeque<>();
 
         for (Cell cell : cells) {
             CellStrength strength = ledger.strengthFor(cell.id());
@@ -92,15 +96,13 @@ public final class Forecast {
                 continue;
             }
             if (strength.isNew()) {
-                untouched += 1;
-                continue;
+                unseen.add(cell.id());
+            } else {
+                pending.add(strength);
             }
-            strength.dueOn().ifPresent(due -> pending.add(new Pending(due, strength.rung())));
         }
 
         List<ProjectionDay> days = new ArrayList<>();
-        int queueOfNew = untouched;
-
         for (LocalDate day : range.days()) {
             if (!policy.allowsDay(CivilDates.weekday(day))) {
                 days.add(new ProjectionDay(day, 0, 0));
@@ -108,19 +110,17 @@ public final class Forecast {
             }
 
             int reviews = 0;
-            for (Pending entry : pending) {
-                if (entry.due.isAfter(day)) {
-                    continue;
+            for (int index = 0; index < pending.size(); index += 1) {
+                CellStrength strength = pending.get(index);
+                if (strength.isDue(day)) {
+                    reviews += 1;
+                    pending.set(index, strength.recordCorrect(ladder, day));
                 }
-                reviews += 1;
-                entry.rung = (int) Math.min(entry.rung + 1L, ladder.topRung());
-                entry.due = CivilDates.addDays(day, ladder.intervalAt(entry.rung));
             }
 
-            int introductions = Math.min(policy.newPerDay(), queueOfNew);
-            queueOfNew -= introductions;
+            int introductions = Math.min(policy.newPerDay(), unseen.size());
             for (int index = 0; index < introductions; index += 1) {
-                pending.add(new Pending(CivilDates.addDays(day, ladder.intervalAt(0)), 0));
+                pending.add(CellStrength.fresh(unseen.removeFirst()).recordCorrect(ladder, day));
             }
 
             days.add(new ProjectionDay(day, reviews, introductions));
@@ -141,17 +141,5 @@ public final class Forecast {
             }
         }
         return days.size();
-    }
-
-    /** A cell the projection is following: when it next comes back and at which rung. */
-    private static final class Pending {
-
-        private LocalDate due;
-        private int rung;
-
-        private Pending(LocalDate due, int rung) {
-            this.due = due;
-            this.rung = rung;
-        }
     }
 }
