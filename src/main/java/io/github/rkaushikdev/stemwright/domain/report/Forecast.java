@@ -27,8 +27,10 @@ import java.util.Optional;
  */
 public final class Forecast {
 
-    private static final Comparator<ForecastDay> BUSIEST_FIRST =
-            Comparator.comparingInt(ForecastDay::due).reversed().thenComparing(ForecastDay::on);
+    private static final Comparator<ForecastDay> BUSIEST_FIRST = Comparator.comparingInt(
+                    (ForecastDay day) -> day.due() + day.carried())
+            .reversed()
+            .thenComparing(ForecastDay::on);
 
     private Forecast() {}
 
@@ -36,6 +38,11 @@ public final class Forecast {
      * One row for every day of the range, in order, counting the cells that fall due on it. A cell
      * already overdue when the range starts is counted on its first day, and a suspended cell or one
      * nobody has answered is not counted at all.
+     *
+     * <p>Reviews a day cannot ask are carried to the next one: everything due on a rest day, and on
+     * a drilling day whatever is past the review ceiling. A Monday after a resting weekend therefore
+     * shows the weekend's reviews waiting beside its own, which is the morning the learner actually
+     * has.
      */
     public static List<ForecastDay> daily(List<Cell> cells, MasteryLedger ledger, DayRange range, DrillPolicy policy) {
         Map<LocalDate, Integer> counts = new HashMap<>();
@@ -47,16 +54,23 @@ public final class Forecast {
             strength.dueOn().ifPresent(due -> counts.merge(CivilDates.maxCivil(due, range.from()), 1, Integer::sum));
         }
 
-        return range.eachDay()
-                .map(day -> {
-                    int due = counts.getOrDefault(day, 0);
-                    return new ForecastDay(
-                            day, due, due > policy.reviewsPerDay(), !policy.allowsDay(CivilDates.weekday(day)));
-                })
-                .toList();
+        List<ForecastDay> days = new ArrayList<>();
+        int waiting = 0;
+        for (LocalDate day : range.days()) {
+            int due = counts.getOrDefault(day, 0);
+            boolean resting = !policy.allowsDay(CivilDates.weekday(day));
+            int load = waiting + due;
+            int asked = resting ? 0 : Math.min(load, policy.reviewsPerDay());
+            days.add(new ForecastDay(day, due, !resting && load > policy.reviewsPerDay(), resting, waiting, asked));
+            waiting = load - asked;
+        }
+        return List.copyOf(days);
     }
 
-    /** The day with the most due, the earliest of several equally busy; nothing for no days. */
+    /**
+     * The day with the most waiting, its own reviews and the ones carried onto it together, the
+     * earliest of several equally busy; nothing for no days.
+     */
     public static Optional<ForecastDay> busiestDay(List<ForecastDay> days) {
         return days.stream().min(BUSIEST_FIRST);
     }
@@ -69,7 +83,7 @@ public final class Forecast {
         return days.stream().filter(ForecastDay::overCeiling).toList();
     }
 
-    /** Reviews due on a day the policy rests, which will spill onto the next day. */
+    /** Reviews due on a day the policy rests, which {@link #daily} carries onto the next drilling day. */
     public static int spilledOnRestDays(List<ForecastDay> days) {
         return days.stream()
                 .filter(ForecastDay::resting)

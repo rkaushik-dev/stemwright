@@ -22,6 +22,7 @@ import io.github.rkaushikdev.stemwright.http.HttpResponse;
 import io.github.rkaushikdev.stemwright.http.Method;
 import io.github.rkaushikdev.stemwright.http.Query;
 import io.github.rkaushikdev.stemwright.http.Router;
+import io.github.rkaushikdev.stemwright.infra.json.JsonObject;
 import io.github.rkaushikdev.stemwright.support.Http;
 import java.time.LocalDate;
 import java.util.Map;
@@ -86,6 +87,8 @@ class ReportRoutesTest {
             assertThat(numberAt(response.body(), "counts.untouched")).isEqualTo(30);
             assertThat(itemsAt(response.body(), "weakest")).isNotEmpty();
             assertThat(itemsAt(response.body(), "forecast")).hasSize(7);
+            assertThat(itemsAt(response.body(), "forecast")).allSatisfy(day -> assertThat(((JsonObject) day).keys())
+                    .containsExactly("on", "due", "carried", "asked"));
         }
 
         @Test

@@ -126,6 +126,37 @@ class ForecastTest {
             List<ForecastDay> days = weekOf(policy(patch().restDays(List.of(3))));
             assertThat(days.getFirst().resting()).isTrue();
             assertThat(Forecast.spilledOnRestDays(days)).isEqualTo(2);
+            assertThat(days.getFirst().asked()).isZero();
+            assertThat(days.getFirst().overCeiling()).isFalse();
+        }
+
+        @Test
+        void carriesWhatARestDayCouldNotAskOntoTheNextDrillingDay() {
+            List<ForecastDay> days = weekOf(policy(patch().restDays(List.of(3, 4))));
+            assertThat(days.stream().map(ForecastDay::carried)).containsExactly(0, 2, 2, 0, 0);
+            assertThat(days.stream().map(ForecastDay::asked)).containsExactly(0, 0, 2, 1, 0);
+        }
+
+        @Test
+        void carriesWhatIsPastTheCeilingAndCountsItAgainstTheNextDay() {
+            List<ForecastDay> days = weekOf(policy(patch().reviewsPerDay(1)));
+            assertThat(days.stream().map(ForecastDay::asked)).containsExactly(1, 1, 0, 1, 0);
+            assertThat(days.stream().map(ForecastDay::carried)).containsExactly(0, 1, 0, 0, 0);
+            assertThat(days.get(1).overCeiling()).isFalse();
+        }
+
+        @Test
+        void callsADayOverTheCeilingOnceTheCarriedReviewsPushItThere() {
+            List<ForecastDay> days = Forecast.daily(
+                    CELLS,
+                    LEDGER,
+                    r("2024-10-01", "2024-10-06"),
+                    policy(patch().reviewsPerDay(1).restDays(List.of(3))));
+            assertThat(days.stream().map(ForecastDay::due)).containsExactly(0, 2, 0, 0, 1, 0);
+            assertThat(Forecast.daysOverCeiling(days).stream().map(ForecastDay::on))
+                    .containsExactly(d("2024-10-03"));
+            assertThat(days.get(3).asked()).isEqualTo(1);
+            assertThat(days.get(4).carried()).isZero();
         }
     }
 
@@ -136,6 +167,14 @@ class ForecastTest {
         void namesTheDayWithTheMostDue() {
             assertThat(Forecast.busiestDay(weekOf(DrillPolicy.DEFAULT)).map(ForecastDay::on))
                     .contains(d("2024-10-02"));
+        }
+
+        @Test
+        void countsTheReviewsCarriedOntoADay() {
+            List<ForecastDay> days = weekOf(policy(patch().restDays(List.of(3, 4))));
+            assertThat(Forecast.busiestDay(days).map(ForecastDay::on)).contains(d("2024-10-02"));
+            List<ForecastDay> capped = weekOf(policy(patch().reviewsPerDay(1).restDays(List.of(3, 4, 5))));
+            assertThat(Forecast.busiestDay(capped).map(ForecastDay::on)).contains(d("2024-10-05"));
         }
 
         @Test

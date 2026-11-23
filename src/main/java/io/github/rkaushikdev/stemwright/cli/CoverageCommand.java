@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.stemwright.cli;
 
 import io.github.rkaushikdev.stemwright.app.Application;
+import io.github.rkaushikdev.stemwright.domain.drill.DrillPolicy;
 import io.github.rkaushikdev.stemwright.domain.drill.Membership;
 import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
 import io.github.rkaushikdev.stemwright.domain.lexicon.Lexeme;
@@ -11,6 +12,9 @@ import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
 import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
 import io.github.rkaushikdev.stemwright.domain.report.Coverage;
 import io.github.rkaushikdev.stemwright.domain.report.CoverageRow;
+import io.github.rkaushikdev.stemwright.domain.report.Forecast;
+import io.github.rkaushikdev.stemwright.domain.report.ForecastDay;
+import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +26,8 @@ import java.util.Map;
  * down the bundles, which says which cells of the table are weak across every word, or down the
  * lexemes, which says which words are weak across the whole table. {@code --ladder} reads maturity
  * against the ladder the learner actually climbs, since a cell at the top of the slow start ladder
- * is three rungs short of the top of the standard one.
+ * is three rungs short of the top of the standard one. {@code --days} adds the forecast of the
+ * days ahead, with the reviews a rest day or the ceiling pushes on to the next one.
  */
 final class CoverageCommand {
 
@@ -45,7 +50,10 @@ final class CoverageCommand {
                         Map.entry("on", Flags.DAY),
                         Map.entry("by", FlagSpec.of(FlagKind.STRING, "bundle or lexeme, the rows to rank")),
                         Map.entry("ladder", FlagSpec.of(FlagKind.STRING, "the ladder key maturity is read against")),
-                        Map.entry("limit", FlagSpec.of(FlagKind.NUMBER, "how many of the weakest rows to show"))),
+                        Map.entry("limit", FlagSpec.of(FlagKind.NUMBER, "how many of the weakest rows to show")),
+                        Map.entry(
+                                "days",
+                                FlagSpec.of(FlagKind.NUMBER, "forecast the reviews of this many days from the day"))),
                 (args, context) -> show(app, args));
     }
 
@@ -83,7 +91,34 @@ final class CoverageCommand {
                                 Render.bar(row.maturity(), BAR_WIDTH),
                                 Render.percent(row.maturity())))
                         .toList());
-        return String.join("\n", summary, "", weakest);
+        if (args.numberFlag("days").isEmpty()) {
+            return String.join("\n", summary, "", weakest);
+        }
+        DayRange range = DayRange.of(on, on.plusDays(Flags.countFrom(args, "days", 1) - 1L));
+        return String.join(
+                "\n", summary, "", weakest, "", forecast(Forecast.daily(cells, ledger, range, DrillPolicy.DEFAULT)));
+    }
+
+    /**
+     * The reviews of each day under the default policy, with what earlier days left waiting and what
+     * the day can ask of them.
+     */
+    private static String forecast(List<ForecastDay> days) {
+        return Render.section(
+                "Forecast",
+                Render.table(
+                        List.of(
+                                Column.of("on"),
+                                Column.of("due", Align.RIGHT),
+                                Column.of("carried", Align.RIGHT),
+                                Column.of("asked", Align.RIGHT)),
+                        days.stream()
+                                .map(day -> List.of(
+                                        day.on().toString() + (day.resting() ? " rest" : ""),
+                                        String.valueOf(day.due()),
+                                        String.valueOf(day.carried()),
+                                        String.valueOf(day.asked())))
+                                .toList()));
     }
 
     private static boolean byLexeme(ParsedArgs args) {

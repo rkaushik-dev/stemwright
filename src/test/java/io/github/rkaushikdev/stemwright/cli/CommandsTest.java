@@ -301,6 +301,27 @@ class CommandsTest {
         }
 
         @Test
+        void forecastsTheDaysAheadWhenAskedHowMany() {
+            Stores stores = seeded();
+            String genitive = Cell.idFor(Drill.PUELLA.id(), "case=gen;number=sg");
+            stores.ledgers()
+                    .put(MasteryLedger.of(
+                            "lrn_one",
+                            List.of(CellStrength.fresh(genitive).recordCorrect(Ladder.STANDARD, App.TODAY))));
+            List<String> lines = Text.split(coverage(stores, "--days", "3").output(), "\n");
+            int at = lines.indexOf("Forecast");
+            assertThat(at).isPositive();
+            assertThat(lines.subList(at + 1, lines.size()))
+                    .containsExactly(
+                            "  on          due  carried  asked",
+                            "  ----------  ---  -------  -----",
+                            "  2024-10-21    0        0      0",
+                            "  2024-10-22    1        0      1",
+                            "  2024-10-23    0        0      0");
+            assertThat(coverage(stores).output()).doesNotContain("Forecast");
+        }
+
+        @Test
         void refusesALadderOrADirectionItDoesNotKnow() {
             assertThat(coverage(seeded(), "--ladder", "glacial").output()).contains("was not found");
             RunResult sideways = coverage(seeded(), "--by", "case");

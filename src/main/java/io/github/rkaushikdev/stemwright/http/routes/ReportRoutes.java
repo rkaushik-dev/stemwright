@@ -76,6 +76,8 @@ public final class ReportRoutes {
                                         .map(day -> Json.object()
                                                 .put("on", day.on().toString())
                                                 .put("due", day.due())
+                                                .put("carried", day.carried())
+                                                .put("asked", day.asked())
                                                 .build())
                                         .toList()))
                         .build());
