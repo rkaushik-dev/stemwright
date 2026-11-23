@@ -21,6 +21,7 @@ import io.github.rkaushikdev.stemwright.domain.drill.ReviewSettings;
 import io.github.rkaushikdev.stemwright.domain.drill.Session;
 import io.github.rkaushikdev.stemwright.domain.errors.NotFoundException;
 import io.github.rkaushikdev.stemwright.domain.mastery.CellStrength;
+import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
 import io.github.rkaushikdev.stemwright.domain.mastery.LeechPolicy;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
 import io.github.rkaushikdev.stemwright.domain.ortho.Hint;
@@ -225,8 +226,9 @@ public final class DrillService {
      * The language's marking and transliteration with the caller's ladder and leech policy, under the
      * drill policy the
      * settings patch: the policy's {@code buryTwins} decides whether an answer buries the cell and
-     * its twins, and a patch that names a leech threshold moves the leech policy to it while keeping
-     * what the leech policy does to a leech. The credit rule is left at its default.
+     * its twins, a patch that names a leech threshold moves the leech policy to it while keeping
+     * what the leech policy does to a leech, and a patch that names a ladder key climbs the built in
+     * ladder it names instead of the caller's. The credit rule is left at its default.
      */
     private ReviewSettings settingsFor(String language, DrillSettings settings) {
         LanguageBundle bundle = Loaders.requireLanguage(stores, language);
@@ -235,7 +237,8 @@ public final class DrillService {
                 .leechThreshold()
                 .map(threshold -> withThreshold(settings.leech(), threshold))
                 .orElse(settings.leech());
-        return ReviewSettings.of(bundle.ortho(), bundle.rules(), settings.ladder(), leech, bundle.transliteration())
+        Ladder ladder = settings.policy().ladderKey().map(Ladder::of).orElse(settings.ladder());
+        return ReviewSettings.of(bundle.ortho(), bundle.rules(), ladder, leech, bundle.transliteration())
                 .withBuryTwins(policy.buryTwins());
     }
 

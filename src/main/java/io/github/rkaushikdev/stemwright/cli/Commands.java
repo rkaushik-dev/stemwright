@@ -2,18 +2,10 @@ package io.github.rkaushikdev.stemwright.cli;
 
 import io.github.rkaushikdev.stemwright.app.Application;
 import io.github.rkaushikdev.stemwright.app.Loaders;
-import io.github.rkaushikdev.stemwright.domain.drill.Membership;
 import io.github.rkaushikdev.stemwright.domain.lexicon.Lexeme;
-import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
-import io.github.rkaushikdev.stemwright.domain.mastery.LedgerCounts;
-import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
-import io.github.rkaushikdev.stemwright.domain.paradigm.Cell;
-import io.github.rkaushikdev.stemwright.domain.report.Coverage;
-import io.github.rkaushikdev.stemwright.domain.report.CoverageRow;
 import io.github.rkaushikdev.stemwright.http.AccountDirectory;
 import io.github.rkaushikdev.stemwright.http.Api;
 import io.github.rkaushikdev.stemwright.http.ApiOptions;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,9 +20,6 @@ import java.util.Optional;
  * real check look optional.
  */
 public final class Commands {
-
-    /** How wide the maturity bar of a coverage row is drawn. */
-    private static final int BAR_WIDTH = 12;
 
     private Commands() {}
 
@@ -51,47 +40,11 @@ public final class Commands {
     }
 
     /**
-     * {@code coverage}: how a learner's ledger stands over a deck on a day against the standard
-     * ladder, and the bundles that need the most work.
+     * {@code coverage}: how a learner's ledger stands over a deck on a day, and the bundles or the
+     * lexemes that need the most work.
      */
     public static Command coverage(Application app) {
-        return Command.of(
-                "coverage",
-                "show how much of a deck a learner holds",
-                "stemwright coverage --language latin --deck all --learner lrn_one",
-                FlagSpecs.of(
-                        Map.entry("language", Flags.LANGUAGE),
-                        Map.entry("deck", Flags.DECK),
-                        Map.entry("learner", Flags.LEARNER),
-                        Map.entry("on", Flags.DAY)),
-                (args, context) -> {
-                    String learnerId = args.requireFlag("learner");
-                    LocalDate on = Flags.dayFrom(app.clock(), args);
-                    Membership membership =
-                            app.drill().membership(args.requireFlag("language"), args.requireFlag("deck"), on);
-                    MasteryLedger ledger =
-                            app.stores().ledgers().get(learnerId).orElseGet(() -> MasteryLedger.empty(learnerId));
-                    List<Cell> cells = membership.cells();
-                    LedgerCounts counts =
-                            ledger.counts(cells.stream().map(Cell::id).toList(), Ladder.STANDARD, on);
-                    List<CoverageRow> rows = Coverage.byBundle(cells, ledger, Ladder.STANDARD, on);
-
-                    String summary = Render.keyValues(List.of(
-                            Map.entry("cells", String.valueOf(counts.known())),
-                            Map.entry("introduced", String.valueOf(counts.introduced())),
-                            Map.entry("mature", String.valueOf(counts.mature())),
-                            Map.entry("due", String.valueOf(counts.due())),
-                            Map.entry("suspended", String.valueOf(counts.suspended()))));
-                    String weakest = Render.table(
-                            List.of(Column.of("bundle"), Column.of("maturity"), Column.of("share", Align.RIGHT)),
-                            Coverage.weakestRows(rows).stream()
-                                    .map(row -> List.of(
-                                            row.key(),
-                                            Render.bar(row.maturity(), BAR_WIDTH),
-                                            Render.percent(row.maturity())))
-                                    .toList());
-                    return String.join("\n", summary, "", weakest);
-                });
+        return CoverageCommand.of(app);
     }
 
     /** {@code lexemes}: the lexicon of a language, or the lexemes a search term matches. */

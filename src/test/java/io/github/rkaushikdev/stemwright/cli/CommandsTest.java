@@ -18,7 +18,9 @@ import io.github.rkaushikdev.stemwright.domain.text.Text;
 import io.github.rkaushikdev.stemwright.support.App;
 import io.github.rkaushikdev.stemwright.support.Drill;
 import io.github.rkaushikdev.stemwright.support.Profiles;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -241,6 +243,69 @@ class CommandsTest {
             assertThat(result.code()).isEqualTo(EXIT_OK);
             assertThat(result.output()).contains("cells");
             assertThat(result.output()).contains("maturity");
+        }
+    }
+
+    @Nested
+    class CoverageOptions {
+
+        private RunResult coverage(Stores stores, String... more) {
+            List<String> argv = new ArrayList<>(
+                    List.of("coverage", "--language", "latin", "--deck", "all", "--learner", "lrn_one"));
+            argv.addAll(List.of(more));
+            return over(stores).run(argv, CONTEXT);
+        }
+
+        /** The seeded stores with puella's genitive singular at the top of the standard ladder. */
+        private Stores withOneTopRung() {
+            Stores stores = seeded();
+            String genitive = Cell.idFor(Drill.PUELLA.id(), "case=gen;number=sg");
+            CellStrength top = new CellStrength(
+                    genitive,
+                    7,
+                    Optional.of(App.TODAY.plusDays(100)),
+                    9,
+                    9,
+                    0,
+                    9,
+                    0,
+                    Optional.of(App.TODAY.minusDays(60)),
+                    false);
+            stores.ledgers().put(MasteryLedger.of("lrn_one", List.of(top)));
+            return stores;
+        }
+
+        @Test
+        void readsMaturityAgainstTheLadderItIsTold() {
+            RunResult standard = coverage(withOneTopRung());
+            RunResult slow = coverage(withOneTopRung(), "--ladder", "slow-start");
+            assertThat(standard.output()).containsPattern("mature +1").containsPattern("ladder +standard");
+            assertThat(slow.output()).containsPattern("mature +0").containsPattern("ladder +slow-start");
+        }
+
+        @Test
+        void ranksTheLexemesByNameWhenAskedToGoDownTheWords() {
+            RunResult result = coverage(seeded(), "--by", "lexeme");
+            List<String> lines = Text.split(result.output(), "\n");
+            assertThat(result.code()).isEqualTo(EXIT_OK);
+            assertThat(lines).anyMatch(line -> line.startsWith("lemma "));
+            assertThat(lines).anyMatch(line -> line.startsWith("puella "));
+            assertThat(lines).noneMatch(line -> line.startsWith("lex_"));
+        }
+
+        @Test
+        void showsAsManyOfTheWeakestRowsAsTheLimitSays() {
+            List<String> lines = Text.split(coverage(seeded(), "--limit", "2").output(), "\n");
+            int header = lines.indexOf("") + 1;
+            assertThat(lines.size() - header - 2).isEqualTo(2);
+        }
+
+        @Test
+        void refusesALadderOrADirectionItDoesNotKnow() {
+            assertThat(coverage(seeded(), "--ladder", "glacial").output()).contains("was not found");
+            RunResult sideways = coverage(seeded(), "--by", "case");
+            assertThat(sideways.code()).isNotEqualTo(EXIT_OK);
+            assertThat(sideways.output()).contains("must be bundle or lexeme, not case");
         }
     }
 

@@ -2,8 +2,10 @@ package io.github.rkaushikdev.stemwright.domain.mastery;
 
 import static io.github.rkaushikdev.stemwright.support.Problems.problemMessages;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.byLessThan;
 
+import io.github.rkaushikdev.stemwright.domain.errors.NotFoundException;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -130,6 +132,23 @@ class LadderTest {
         void clampsRatherThanFallingOffEitherEnd() {
             assertThat(STANDARD.intervalAt(-1)).isEqualTo(1);
             assertThat(STANDARD.intervalAt(99)).isEqualTo(340);
+        }
+    }
+
+    @Nested
+    class ByKey {
+
+        @Test
+        void findsEachBuiltInLadderByItsKey() {
+            assertThat(Ladder.of("standard")).isSameAs(Ladder.STANDARD);
+            assertThat(Ladder.of("slow-start")).isSameAs(Ladder.SLOW);
+        }
+
+        @Test
+        void refusesAKeyNoBuiltInLadderHas() {
+            assertThatThrownBy(() -> Ladder.of("glacial"))
+                    .isInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("glacial");
         }
     }
 

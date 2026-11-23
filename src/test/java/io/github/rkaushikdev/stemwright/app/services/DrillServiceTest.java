@@ -286,6 +286,32 @@ class DrillServiceTest {
         }
 
         @Test
+        void climbsTheBuiltInLadderThePolicyPatchNames() {
+            DrillSettings slow = DrillSettings.builder()
+                    .policy(DrillPolicyPatch.builder()
+                            .newPerDay(3)
+                            .perLexemeCap(10)
+                            .rowSpacing(0)
+                            .ladderKey("slow-start")
+                            .build())
+                    .ladder(FLAT)
+                    .build();
+            DrillService service = build().service();
+            Cell target = firstCell(queueOn(service, DAY));
+            String expected =
+                    service.answer(ask(target.id(), "x"), slow).review().expected();
+            service.answer(ask(target.id(), expected), slow);
+            AnswerOutcome second = service.answer(
+                    AnswerRequest.of("lrn_one", "latin", "all", target.id(), expected)
+                            .withOn(DAY.plusDays(1)),
+                    slow);
+
+            assertThat(second.review().ledger().strengthFor(target.id()).rung()).isEqualTo(1);
+            assertThat(second.review().ledger().strengthFor(target.id()).dueOn())
+                    .contains(DAY.plusDays(3));
+        }
+
+        @Test
         void suspendsAtTheThresholdThePolicyPatchNames() {
             DrillSettings patched = DrillSettings.builder()
                     .policy(DrillPolicyPatch.builder()

@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.stemwright.domain.mastery;
 
 import io.github.rkaushikdev.stemwright.domain.Identifiers;
+import io.github.rkaushikdev.stemwright.domain.errors.NotFoundException;
 import io.github.rkaushikdev.stemwright.domain.errors.ProblemCollector;
 import io.github.rkaushikdev.stemwright.domain.text.Numbers;
 import java.util.List;
@@ -45,6 +46,9 @@ public record Ladder(String key, String label, List<Integer> rungs, int lapseDro
             .spread(0.05)
             .build());
 
+    /** The ladders a policy or a learner can name by key, in the order they are offered. */
+    private static final List<Ladder> BUILT_IN = List.of(STANDARD, SLOW);
+
     public Ladder {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(label, "label");
@@ -83,6 +87,19 @@ public record Ladder(String key, String label, List<Integer> rungs, int lapseDro
 
         problems.throwIfAny("ladder " + key + " is not usable");
         return new Ladder(key, input.label().orElse(key), rungs, lapseDrop, spread);
+    }
+
+    /**
+     * The built in ladder with the key, which is what a drill policy's {@code ladderKey} and a
+     * learner's preference name.
+     *
+     * @throws NotFoundException of kind {@code ladder} for a key no built in ladder has
+     */
+    public static Ladder of(String key) {
+        return BUILT_IN.stream()
+                .filter(ladder -> ladder.key.equals(key))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("ladder", key));
     }
 
     public int rungCount() {
