@@ -2,6 +2,7 @@ package io.github.rkaushikdev.stemwright.domain.drill;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import io.github.rkaushikdev.stemwright.domain.IdKind;
 import io.github.rkaushikdev.stemwright.domain.Identifiers;
@@ -181,7 +182,29 @@ class SessionTest {
         void summarisesAnEmptySessionWithoutDividingByZero() {
             SessionSummary summary = SESSION.summarise();
             assertThat(summary.accuracy()).isEqualTo(0);
+            assertThat(summary.firstTryAccuracy()).isEqualTo(0);
             assertThat(summary.medianElapsedMs()).isEmpty();
+            assertThat(summary.unresolved()).isEmpty();
+        }
+
+        @Test
+        void countsOnlyTheFirstAnswerToEachCellForTheFirstTryShare() {
+            Session relearnt = record(
+                    record(
+                            record(SESSION, makeAttempt(attempt -> attempt.verdict(MatchVerdict.WRONG)
+                                    .given("x"))),
+                            makeAttempt(attempt -> attempt.sequence(2))),
+                    makeAttempt(attempt -> attempt.sequence(3).cellId("cell_bbbbbb")));
+            SessionSummary summary = relearnt.summarise();
+            assertThat(summary.accuracy()).isCloseTo(2.0 / 3, within(1e-9));
+            assertThat(summary.firstTryAccuracy()).isEqualTo(0.5);
+            assertThat(summary.unresolved()).isEmpty();
+        }
+
+        @Test
+        void listsTheCellsLeftUnresolved() {
+            assertThat(filled.summarise().unresolved()).containsExactly("cell_aaaaaa");
+            assertThat(filled.summarise().firstTryAccuracy()).isEqualTo(1);
         }
 
         @Test
@@ -232,6 +255,20 @@ class SessionTest {
             Session filled = record(SESSION, makeAttempt());
             assertThat(filled.summarise().describe())
                     .isEqualTo("1 answers across 1 cells on 2025-03-03, 100 percent right");
+        }
+
+        @Test
+        void addsTheFirstTryShareAndWhatIsLeftToGoOverWhenTheyTellTheLearnerSomething() {
+            Session mixed = record(
+                    record(
+                            record(SESSION, makeAttempt(attempt -> attempt.verdict(MatchVerdict.WRONG)
+                                    .given("x"))),
+                            makeAttempt(attempt -> attempt.sequence(2))),
+                    makeAttempt(
+                            attempt -> attempt.sequence(3).cellId("cell_bbbbbb").verdict(MatchVerdict.NEAR)));
+            assertThat(mixed.summarise().describe())
+                    .isEqualTo("3 answers across 2 cells on 2025-03-03, 33 percent right,"
+                            + " 0 percent at the first try, 1 still to go over");
         }
     }
 }

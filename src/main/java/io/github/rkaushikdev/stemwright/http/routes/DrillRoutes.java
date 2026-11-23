@@ -133,6 +133,12 @@ public final class DrillRoutes {
                         .put("answers", summary.tally().total())
                         .put("correct", summary.tally().correct())
                         .put("accuracy", summary.accuracy())
+                        .put("firstTryAccuracy", summary.firstTryAccuracy())
+                        .put(
+                                "unresolved",
+                                Json.array(summary.unresolved().stream()
+                                        .<Json>map(Json::of)
+                                        .toList()))
                         .build());
     }
 }

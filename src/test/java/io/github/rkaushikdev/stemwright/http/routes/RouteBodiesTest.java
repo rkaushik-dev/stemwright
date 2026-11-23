@@ -101,7 +101,8 @@ class RouteBodiesTest {
                 "/learners/lrn_one/sessions/" + sessionId + "/finish",
                 token("tok-student").withQuery(COURSE)));
         assertThat(Json.stringify(finished.body()))
-                .isEqualTo("{\"sessionId\":\"" + sessionId + "\",\"answers\":2,\"correct\":1,\"accuracy\":0.5}");
+                .isEqualTo("{\"sessionId\":\"" + sessionId
+                        + "\",\"answers\":2,\"correct\":1,\"accuracy\":0.5,\"firstTryAccuracy\":0,\"unresolved\":[]}");
     }
 
     @Test

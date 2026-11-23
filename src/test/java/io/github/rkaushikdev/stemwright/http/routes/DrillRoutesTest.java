@@ -22,6 +22,7 @@ import io.github.rkaushikdev.stemwright.infra.json.Json;
 import io.github.rkaushikdev.stemwright.support.Book;
 import io.github.rkaushikdev.stemwright.support.Drill;
 import io.github.rkaushikdev.stemwright.support.Http;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -228,18 +229,47 @@ class DrillRoutesTest {
     @Nested
     class TheFinishRoute {
 
-        @Test
-        void closesASessionAndReportsTheTally() {
-            Router handle = build();
-            HttpResponse answered = answer(handle, firstCellId(handle), "x");
-            String sessionId = textAt(answered.body(), "sessionId");
-
-            HttpResponse response = handle.handle(makeRequest(
+        private HttpResponse finish(Router handle, String sessionId) {
+            return handle.handle(makeRequest(
                     Method.POST,
                     "/learners/lrn_one/sessions/" + sessionId + "/finish",
                     token("tok-student").withQuery(COURSE)));
+        }
+
+        @Test
+        void closesASessionAndReportsTheTally() {
+            Router handle = build();
+            String cellId = firstCellId(handle);
+            HttpResponse answered = answer(handle, cellId, "x");
+
+            HttpResponse response = finish(handle, textAt(answered.body(), "sessionId"));
             assertThat(response.status()).isEqualTo(200);
             assertThat(numberAt(response.body(), "answers")).isEqualTo(1);
+            assertThat(itemsAt(response.body(), "unresolved")).containsExactly(Json.of(cellId));
+        }
+
+        @Test
+        void reportsTheFirstTryShareApartFromTheOverallOne() {
+            Router handle = build();
+            List<String> cells = itemsAt(
+                            handle.handle(makeRequest(
+                                            Method.GET,
+                                            QUEUE,
+                                            token("tok-student").withQuery(COURSE)))
+                                    .body(),
+                            "cells")
+                    .stream()
+                    .map(cell -> textAt(cell, "id"))
+                    .toList();
+            HttpResponse missed = answer(handle, cells.get(0), "x");
+            answer(handle, cells.get(0), textAt(missed.body(), "expected"));
+            HttpResponse other = answer(handle, cells.get(1), "x");
+            answer(handle, cells.get(1), textAt(other.body(), "expected"));
+
+            HttpResponse response = finish(handle, textAt(missed.body(), "sessionId"));
+            assertThat(numberAt(response.body(), "accuracy")).isEqualTo(0.5);
+            assertThat(numberAt(response.body(), "firstTryAccuracy")).isZero();
+            assertThat(itemsAt(response.body(), "unresolved")).isEmpty();
         }
     }
 

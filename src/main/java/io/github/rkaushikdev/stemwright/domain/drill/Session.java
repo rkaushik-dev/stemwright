@@ -127,9 +127,16 @@ public record Session(
         return attempts.stream().filter(entry -> entry.cellId().equals(cellId)).toList();
     }
 
-    /** The sitting counted up: the verdicts, the accuracy, the distinct cells and the median time. */
+    /**
+     * The sitting counted up: the verdicts, the accuracy, the distinct cells, the median time, the
+     * share of cells right at the first try and the cells still unresolved.
+     */
     public SessionSummary summarise() {
         AttemptTally tallied = AttemptTally.of(attempts);
+        List<String> seen = cellsSeen();
+        long rightFirst = seen.stream()
+                .filter(cellId -> attemptsForCell(cellId).getFirst().wasCorrect())
+                .count();
         return new SessionSummary(
                 id,
                 learnerId,
@@ -137,9 +144,11 @@ public record Session(
                 on,
                 tallied,
                 tallied.accuracy(),
-                cellsSeen().size(),
+                seen.size(),
                 Attempt.medianElapsed(attempts),
-                closed);
+                closed,
+                seen.isEmpty() ? 0 : (double) rightFirst / seen.size(),
+                unresolvedCells());
     }
 
     /**
