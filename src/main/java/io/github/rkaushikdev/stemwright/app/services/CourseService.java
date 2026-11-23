@@ -19,6 +19,7 @@ import io.github.rkaushikdev.stemwright.domain.course.Permission;
 import io.github.rkaushikdev.stemwright.domain.course.Roster;
 import io.github.rkaushikdev.stemwright.domain.drill.Deck;
 import io.github.rkaushikdev.stemwright.domain.drill.DrillContext;
+import io.github.rkaushikdev.stemwright.domain.drill.DrillPolicy;
 import io.github.rkaushikdev.stemwright.domain.errors.ConflictException;
 import io.github.rkaushikdev.stemwright.domain.errors.ForbiddenException;
 import io.github.rkaushikdev.stemwright.domain.errors.NotFoundException;
@@ -26,6 +27,7 @@ import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
 import io.github.rkaushikdev.stemwright.domain.mastery.Attempt;
 import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
 import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.mastery.ShieldSet;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -97,7 +99,8 @@ public final class CourseService {
 
     /**
      * Enrols somebody on the course and stores the enrolment, in place of any enrolment they had on
-     * it.
+     * it. The reviews of theirs that fall due inside the enrolment's shields are pushed out past
+     * them, no more onto one day than the drill policy with the enrolment's patch asks in a day.
      *
      * @throws NotFoundException of kind {@code course} when the course is not stored
      * @throws ForbiddenException when the actor may not edit the course
@@ -108,7 +111,23 @@ public final class CourseService {
         actor.requirePermission(Permission.EDIT_COURSE, scope);
         Enrolment enrolment = Enrolment.of(scope.course(), input);
         stores.courses().putEnrolment(enrolment);
+        deferShielded(enrolment);
         return enrolment;
+    }
+
+    private void deferShielded(Enrolment enrolment) {
+        if (enrolment.shields().windows().isEmpty()) {
+            return;
+        }
+        stores.ledgers().get(enrolment.learnerId()).ifPresent(ledger -> {
+            int perDay = DrillPolicy.DEFAULT.applyPatch(enrolment.policyPatch()).reviewsPerDay();
+            ShieldSet.Applied applied = enrolment
+                    .shields()
+                    .applyTo(ledger, List.copyOf(ledger.byCell().keySet()), Math.max(1, perDay));
+            if (!applied.outcomes().isEmpty()) {
+                stores.ledgers().put(applied.ledger());
+            }
+        });
     }
 
     /**

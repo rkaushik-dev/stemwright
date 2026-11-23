@@ -1,7 +1,10 @@
 package io.github.rkaushikdev.stemwright.domain.mastery;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
+import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import java.time.LocalDate;
@@ -165,6 +168,49 @@ class ShieldSetTest {
             assertThat(SHIELDS.applyTo(MasteryLedger.of("lrn_one", List.of()), cells)
                             .outcomes())
                     .isEmpty();
+        }
+
+        @Test
+        void spreadsTheReviewsAShieldGatheredOverTheOpenDaysAfterIt() {
+            List<CellStrength> week = List.of(
+                    CellStrength.fresh("cell_m").recordCorrect(FLAT, d("2025-03-10")),
+                    CellStrength.fresh("cell_n").recordCorrect(FLAT, d("2025-03-11")),
+                    CellStrength.fresh("cell_o").recordCorrect(FLAT, d("2025-03-11")),
+                    CellStrength.fresh("cell_p").recordCorrect(FLAT, d("2025-03-14")),
+                    before);
+            MasteryLedger away = MasteryLedger.of("lrn_one", week);
+            ShieldSet.Applied applied =
+                    SHIELDS.applyTo(away, List.of("cell_p", "cell_o", "cell_n", "cell_m", "cell_b"), 2);
+
+            assertThat(applied.outcomes())
+                    .extracting(ShieldOutcome::cellId, ShieldOutcome::to)
+                    .containsExactly(
+                            tuple("cell_p", d("2025-03-18")),
+                            tuple("cell_o", d("2025-03-18")),
+                            tuple("cell_n", d("2025-03-17")),
+                            tuple("cell_m", d("2025-03-17")));
+            assertThat(applied.ledger().strengthFor("cell_b").dueOn()).contains(d("2025-03-02"));
+        }
+
+        @Test
+        void rollsAFullDayOnPastTheNextShieldRatherThanIntoIt() {
+            ShieldSet backToBack = ShieldSet.of(List.of(
+                    ShieldInput.of(r("2025-03-10", "2025-03-16")), ShieldInput.of(r("2025-03-18", "2025-03-20"))));
+            MasteryLedger away = MasteryLedger.of(
+                    "lrn_one",
+                    List.of(
+                            CellStrength.fresh("cell_m").recordCorrect(FLAT, d("2025-03-10")),
+                            CellStrength.fresh("cell_n").recordCorrect(FLAT, d("2025-03-11"))));
+            ShieldSet.Applied applied = backToBack.applyTo(away, List.of("cell_m", "cell_n"), 1);
+            assertThat(applied.ledger().strengthFor("cell_m").dueOn()).contains(d("2025-03-17"));
+            assertThat(applied.ledger().strengthFor("cell_n").dueOn()).contains(d("2025-03-21"));
+        }
+
+        @Test
+        void refusesARoomOfNothingADay() {
+            assertThatThrownBy(() -> SHIELDS.applyTo(ledger, cells, 0))
+                    .isInstanceOf(ValidationException.class)
+                    .hasMessageContaining("perDay");
         }
 
         @Test

@@ -1,10 +1,15 @@
 package io.github.rkaushikdev.stemwright.domain.mastery;
 
+import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
+import io.github.rkaushikdev.stemwright.domain.text.Collation;
 import io.github.rkaushikdev.stemwright.domain.text.Normalise;
 import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -30,6 +35,10 @@ public record ShieldSet(List<Shield> shields, List<DayRange> windows) {
     private static final String NO_REASON = "no reason recorded";
     private static final int REASON_LIMIT = 200;
     private static final int STREAK_LIMIT = 400;
+
+    private static final Comparator<CellStrength> EARLIEST_DUE = Comparator.comparing(
+                    (CellStrength strength) -> strength.dueOn().orElseThrow())
+            .thenComparing(CellStrength::cellId, Collation.ORDER);
 
     public ShieldSet {
         shields = List.copyOf(shields);
@@ -86,26 +95,53 @@ public record ShieldSet(List<Shield> shields, List<DayRange> windows) {
     }
 
     /**
-     * Pushes every review due inside a shield out to the first open day. Cells due before the shield
-     * are left alone: a learner who was already behind when the shield started does not get the
-     * backlog forgiven.
+     * Pushes every review due inside a shield out to the first open day, however many land there.
+     *
+     * @see #applyTo(MasteryLedger, List, int)
      */
     public Applied applyTo(MasteryLedger ledger, List<String> cellIds) {
-        List<CellStrength> changed = new ArrayList<>();
-        List<ShieldOutcome> outcomes = new ArrayList<>();
+        return applyTo(ledger, cellIds, Integer.MAX_VALUE);
+    }
 
-        for (String cellId : cellIds) {
-            CellStrength strength = ledger.strengthFor(cellId);
-            if (strength.suspended()
-                    || strength.dueOn().filter(this::isShielded).isEmpty()) {
-                continue;
-            }
+    /**
+     * Pushes every review due inside a shield out past it, at most {@code perDay} of them onto any
+     * one open day. A week away gathers a week of reviews, and landing every one of them on the first
+     * Monday back is how a learner comes home to a queue they cannot finish; so the earliest due go
+     * first and the rest roll on to the open days after, never into another shield. Cells due before
+     * the shield are left alone: a learner who was already behind when the shield started does not
+     * get the backlog forgiven, and those cells do not take up room on the days after it either.
+     *
+     * @param perDay how many deferred reviews one open day takes, at least one
+     * @throws io.github.rkaushikdev.stemwright.domain.errors.ValidationException on {@code perDay}
+     *     when it is below one
+     */
+    public Applied applyTo(MasteryLedger ledger, List<String> cellIds, int perDay) {
+        if (perDay < 1) {
+            throw ValidationException.field("perDay", "must be a whole number above zero: " + perDay);
+        }
+        List<CellStrength> deferred = cellIds.stream()
+                .map(ledger::strengthFor)
+                .filter(strength -> !strength.suspended()
+                        && strength.dueOn().filter(this::isShielded).isPresent())
+                .sorted(EARLIEST_DUE)
+                .toList();
+
+        Map<LocalDate, Integer> taken = new HashMap<>();
+        Map<String, ShieldOutcome> moved = new HashMap<>();
+        List<CellStrength> changed = new ArrayList<>();
+        for (CellStrength strength : deferred) {
             LocalDate due = strength.dueOn().orElseThrow();
             LocalDate open = firstOpenDay(due);
+            while (taken.getOrDefault(open, 0) >= perDay) {
+                open = firstOpenDay(open.plusDays(1));
+            }
+            taken.merge(open, 1, Integer::sum);
             changed.add(strength.deferTo(open));
-            outcomes.add(new ShieldOutcome(cellId, due, open));
+            moved.put(strength.cellId(), new ShieldOutcome(strength.cellId(), due, open));
         }
 
+        List<ShieldOutcome> outcomes =
+                cellIds.stream().map(moved::get).filter(Objects::nonNull).toList();
         return new Applied(ledger.withStrengths(changed), outcomes);
     }
 

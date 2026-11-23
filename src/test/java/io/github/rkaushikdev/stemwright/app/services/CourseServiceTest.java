@@ -21,14 +21,21 @@ import io.github.rkaushikdev.stemwright.domain.course.EnrolmentInput;
 import io.github.rkaushikdev.stemwright.domain.course.EnrolmentRole;
 import io.github.rkaushikdev.stemwright.domain.drill.Deck;
 import io.github.rkaushikdev.stemwright.domain.drill.DeckInput;
+import io.github.rkaushikdev.stemwright.domain.drill.DrillPolicyPatch;
 import io.github.rkaushikdev.stemwright.domain.errors.ForbiddenException;
 import io.github.rkaushikdev.stemwright.domain.errors.NotFoundException;
 import io.github.rkaushikdev.stemwright.domain.errors.ValidationException;
+import io.github.rkaushikdev.stemwright.domain.mastery.CellStrength;
 import io.github.rkaushikdev.stemwright.domain.mastery.Ladder;
 import io.github.rkaushikdev.stemwright.domain.mastery.LadderInput;
+import io.github.rkaushikdev.stemwright.domain.mastery.MasteryLedger;
+import io.github.rkaushikdev.stemwright.domain.mastery.ShieldInput;
+import io.github.rkaushikdev.stemwright.domain.mastery.ShieldSet;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
+import io.github.rkaushikdev.stemwright.domain.time.DayRange;
 import io.github.rkaushikdev.stemwright.support.App.Harness;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -50,7 +57,10 @@ class CourseServiceTest {
 
     /** The seeded stores with the decks {@code all} and {@code core} and the Michaelmas course. */
     private static CourseService build() {
-        Stores stores = seededStores();
+        return build(seededStores());
+    }
+
+    private static CourseService build(Stores stores) {
         stores.decks().put(Deck.of(LATIN_NOUN, DeckInput.of("all")));
         stores.decks().put(Deck.of(LATIN_NOUN, DeckInput.of("core")));
         stores.courses().put(MICHAELMAS);
@@ -129,6 +139,38 @@ class CourseServiceTest {
             CourseService service = build();
             Enrolment enrolment = service.enrol(TEACHER, "latin-1a", EnrolmentInput.of("lrn_one"));
             assertThat(enrolment.window()).isEqualTo(MICHAELMAS.term());
+        }
+
+        @Test
+        void pushesTheReviewsDueInsideAShieldOutPastItAtTheDailyCeiling() {
+            Stores stores = seededStores();
+            List<CellStrength> due = new ArrayList<>();
+            for (String cellId : List.of("cell_a", "cell_b", "cell_c")) {
+                due.add(CellStrength.fresh(cellId).recordCorrect(FLAT, d("2024-11-04")));
+            }
+            stores.ledgers().put(MasteryLedger.of("lrn_one", due));
+            EnrolmentInput shielded = EnrolmentInput.builder("lrn_one")
+                    .shields(ShieldSet.of(
+                            List.of(ShieldInput.of(DayRange.of(d("2024-11-05"), d("2024-11-08")), "reading week"))))
+                    .policyPatch(DrillPolicyPatch.builder().reviewsPerDay(2).build())
+                    .build();
+
+            build(stores).enrol(TEACHER, "latin-1a", shielded);
+
+            MasteryLedger after = stores.ledgers().get("lrn_one").orElseThrow();
+            assertThat(after.strengthFor("cell_a").dueOn()).contains(d("2024-11-09"));
+            assertThat(after.strengthFor("cell_b").dueOn()).contains(d("2024-11-09"));
+            assertThat(after.strengthFor("cell_c").dueOn()).contains(d("2024-11-10"));
+        }
+
+        @Test
+        void leavesTheLedgerAloneForAnEnrolmentWithNoShields() {
+            Stores stores = seededStores();
+            MasteryLedger before = MasteryLedger.of(
+                    "lrn_one", List.of(CellStrength.fresh("cell_a").recordCorrect(FLAT, d("2024-11-04"))));
+            stores.ledgers().put(before);
+            build(stores).enrol(TEACHER, "latin-1a", EnrolmentInput.of("lrn_one"));
+            assertThat(stores.ledgers().get("lrn_one")).contains(before);
         }
 
         @Test
