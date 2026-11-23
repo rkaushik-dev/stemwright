@@ -1,7 +1,9 @@
 package io.github.rkaushikdev.stemwright.domain.ortho;
 
+import static io.github.rkaushikdev.stemwright.domain.ortho.FoldStep.CONSONANTAL_LETTERS;
 import static io.github.rkaushikdev.stemwright.domain.ortho.FoldStep.FINAL_FORMS;
 import static io.github.rkaushikdev.stemwright.domain.ortho.FoldStep.LENGTH_MARKS;
+import static io.github.rkaushikdev.stemwright.domain.ortho.FoldStep.LIGATURES;
 import static io.github.rkaushikdev.stemwright.domain.ortho.FoldStep.LOWERCASE;
 import static io.github.rkaushikdev.stemwright.domain.ortho.FoldStep.MARKS;
 import static io.github.rkaushikdev.stemwright.domain.ortho.FoldStep.PUNCTUATION;
@@ -71,6 +73,39 @@ class FoldingTest {
         @Test
         void foldsTheHebrewFinalLettersToo() {
             assertThat(applyFolds("מלך", List.of(FINAL_FORMS))).isEqualTo("מלכ");
+        }
+
+        @Test
+        void spellsOutTheLatinLigatures() {
+            assertThat(applyFolds("pœnæ", List.of(LIGATURES))).isEqualTo("poenae");
+            assertThat(applyFolds("Æneas", List.of(LIGATURES))).isEqualTo("AEneas");
+            assertThat(foldedEqual("cælum", "caelum", List.of(LIGATURES))).isTrue();
+            assertThat(foldedEqual("cælum", "celum", List.of(LIGATURES))).isFalse();
+        }
+
+        @Test
+        void readsConsonantalVAndJAsTheirVowels() {
+            assertThat(applyFolds("virum", List.of(CONSONANTAL_LETTERS))).isEqualTo("uirum");
+            assertThat(applyFolds("Julius", List.of(CONSONANTAL_LETTERS))).isEqualTo("Iulius");
+            assertThat(foldedEqual("jam", "iam", List.of(CONSONANTAL_LETTERS))).isTrue();
+            assertThat(foldedEqual("vir", "uir", List.of(LIGATURES))).isFalse();
+        }
+
+        @Test
+        void keepsAMarkOnTheLetterThatReplacedTheOneItSatOn() {
+            String marked = Normalise.toForm("v" + MACRON + "s", Form.NFC);
+            assertThat(applyFolds(marked, List.of(CONSONANTAL_LETTERS))).isEqualTo("ūs");
+            assertThat(applyFolds(marked, List.of(CONSONANTAL_LETTERS, LENGTH_MARKS)))
+                    .isEqualTo("us");
+        }
+
+        @Test
+        void foldsTheLettersAfterCapitalsWhicheverOrderTheyWereListedIn() {
+            assertThat(applyFolds("VIRVM", List.of(CONSONANTAL_LETTERS, LOWERCASE)))
+                    .isEqualTo("uirum");
+            assertThat(describeFolds(List.of(CONSONANTAL_LETTERS, LIGATURES, LOWERCASE)))
+                    .containsExactly(
+                            "ignore capitals", "accept ae and oe for a ligature", "accept u for v and i for j");
         }
 
         @Test

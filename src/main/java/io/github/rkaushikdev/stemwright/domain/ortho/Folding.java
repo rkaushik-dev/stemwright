@@ -16,7 +16,10 @@ import java.util.Set;
  */
 public final class Folding {
 
-    /** The order steps run in: punctuation, capitals, final letters, length marks, accents, spacing. */
+    /**
+     * The order steps run in: punctuation, capitals, final letters, ligatures, consonantal letters,
+     * length marks, accents, spacing.
+     */
     public static final List<FoldStep> ORDER = List.of(FoldStep.values());
 
     private Folding() {}
