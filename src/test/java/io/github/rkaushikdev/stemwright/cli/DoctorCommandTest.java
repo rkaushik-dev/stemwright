@@ -55,6 +55,11 @@ class DoctorCommandTest {
 
     /** A language with one class, one binding, one lexeme and one deck, plus any bindings given. */
     private static Program tidy(Map<String, String> bindings) {
+        return programOver(tidyStores(bindings));
+    }
+
+    /** The stores {@link #tidy(Map)} runs over. */
+    private static Stores tidyStores(Map<String, String> bindings) {
         Stores stores = MemoryStores.create();
         stores.languages()
                 .put(new LanguageBundle(
@@ -74,7 +79,7 @@ class DoctorCommandTest {
         stores.books().put(ProfileBook.of(new ProfileBookInput("latin", List.of(Book.FIRST_HISTORY), bound)));
         stores.lexemes().put(Drill.PUELLA);
         stores.decks().put(Deck.of(Profiles.LATIN_NOUN, DeckInput.of("all")));
-        return programOver(stores);
+        return stores;
     }
 
     private static RunResult run(Program program, String... argv) {
@@ -120,6 +125,20 @@ class DoctorCommandTest {
         @Test
         void passes() {
             assertThat(run(tidy(), "doctor", "--language", "latin").code()).isEqualTo(EXIT_OK);
+        }
+
+        @Test
+        void failsOnceADeckRunsAtALevelTheLanguageDoesNotDeclare() {
+            Stores stores = tidyStores(Map.of());
+            stores.decks()
+                    .put(Deck.of(
+                            Profiles.LATIN_NOUN,
+                            DeckInput.builder("prose")
+                                    .toleranceLevel("pedantic")
+                                    .build()));
+            RunResult result = run(programOver(stores), "doctor", "--language", "latin");
+            assertThat(result.code()).isEqualTo(EXIT_FAILED);
+            assertThat(result.output()).contains("prose runs at the level pedantic, which latin does not declare");
         }
 
         @Test

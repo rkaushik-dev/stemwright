@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The editorial state of one language, read on a day.
@@ -24,7 +25,8 @@ import java.util.Map;
  *
  * <p>It takes the day because every one of those answers depends on it, and it takes the
  * memberships already resolved rather than resolving them itself, so a caller cannot check one day
- * and report another.
+ * and report another. A deck at a tolerance level the language never declared fails the same way
+ * one answer later, so it is reported with the rest.
  */
 public final class Health {
 
@@ -82,13 +84,36 @@ public final class Health {
                 findings.add(new Finding(FindingLevel.ERROR, PROFILES, profileKey + " holds no revisions at all"));
                 continue;
             }
-            if (entry.getValue().revisionInForce(input.on()).isEmpty()) {
+            Optional<ProfileRevision> inForce = entry.getValue().revisionInForce(input.on());
+            if (inForce.isEmpty()) {
                 findings.add(new Finding(
                         FindingLevel.WARNING,
                         PROFILES,
                         profileKey + " has nothing in force on " + input.on() + ", the first starts "
                                 + revisions.getFirst().effectiveFrom()));
+                continue;
             }
+            checkSyncretism(profileKey, inForce.get(), findings);
+        }
+    }
+
+    /**
+     * A pair the revision declares one form and its endings build differently is a warning, because
+     * burial hides the second cell once the first is answered and the learner never practises an
+     * ending that is not in fact the same. A pair the endings happen to build alike without being
+     * declared is left alone: asking it twice costs a question and hides nothing.
+     */
+    private static void checkSyncretism(String profileKey, ProfileRevision revision, List<Finding> findings) {
+        List<String> unbuilt = revision.syncretism().reconcileWith(revision.profile()).stream()
+                .filter(pair -> pair.declared() && !pair.produced())
+                .map(pair -> pair.first() + " and " + pair.second())
+                .toList();
+        if (!unbuilt.isEmpty()) {
+            findings.add(new Finding(
+                    FindingLevel.WARNING,
+                    PROFILES,
+                    profileKey + " revision " + revision.ordinal() + " declares " + String.join(", ", unbuilt)
+                            + " one form, but its endings build them differently"));
         }
     }
 
@@ -141,6 +166,15 @@ public final class Health {
         LocalDate on = input.on();
         for (HealthInput.ResolvedDeck resolved : input.decks()) {
             String deckKey = resolved.deck().key();
+            resolved.deck()
+                    .toleranceLevel()
+                    .filter(level -> input.ortho().levelOf(level).isEmpty())
+                    .ifPresent(level -> findings.add(new Finding(
+                            FindingLevel.ERROR,
+                            DECKS,
+                            deckKey + " runs at the level " + level + ", which "
+                                    + input.ortho().language()
+                                    + " does not declare, so no answer to it can be marked")));
             DeckStats stats = DeckStats.of(resolved.deck(), resolved.membership(), List.of());
             if (stats.cells() == 0) {
                 findings.add(new Finding(FindingLevel.ERROR, DECKS, deckKey + " selects nothing on " + on));

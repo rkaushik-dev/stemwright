@@ -6,6 +6,7 @@ import static io.github.rkaushikdev.stemwright.support.Drill.AGER;
 import static io.github.rkaushikdev.stemwright.support.Drill.BELLUM;
 import static io.github.rkaushikdev.stemwright.support.Drill.PUELLA;
 import static io.github.rkaushikdev.stemwright.support.Drill.REX;
+import static io.github.rkaushikdev.stemwright.support.Profiles.FIRST_DECLENSION;
 import static io.github.rkaushikdev.stemwright.support.Profiles.LATIN_NOUN;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,8 +22,13 @@ import io.github.rkaushikdev.stemwright.domain.lexicon.Lexicon;
 import io.github.rkaushikdev.stemwright.domain.lexicon.PartOfSpeech;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBook;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBookInput;
+import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileRevisionInput;
+import io.github.rkaushikdev.stemwright.domain.paradigm.RevisionHistory;
+import io.github.rkaushikdev.stemwright.domain.paradigm.SyncretismGroupInput;
+import io.github.rkaushikdev.stemwright.domain.paradigm.SyncretismMap;
 import io.github.rkaushikdev.stemwright.domain.time.CivilDates;
 import io.github.rkaushikdev.stemwright.support.Classes;
+import io.github.rkaushikdev.stemwright.support.Ortho;
 import io.github.rkaushikdev.stemwright.support.TestMaps;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -56,7 +62,7 @@ class HealthTest {
     }
 
     private static List<Finding> check(DrillContext context, List<HealthInput.ResolvedDeck> decks, LocalDate on) {
-        return Health.check(new HealthInput(context, decks, on));
+        return Health.check(new HealthInput(context, Ortho.LATIN, decks, on));
     }
 
     private static List<Finding> check(DrillContext context) {
@@ -116,6 +122,44 @@ class HealthTest {
         void staysQuietOnceEveryProfileHasBeenPublished() {
             assertThat(messagesFor(check(contextOf()), "profiles")).isEmpty();
         }
+
+        @Test
+        void warnsAboutTwinsDeclaredOneFormThatTheEndingsBuildApart() {
+            RevisionHistory overclaimed = RevisionHistory.of(
+                    "first-declension",
+                    List.of(ProfileRevisionInput.of(CivilDates.parseCivilDate("2024-09-01"), FIRST_DECLENSION)
+                            .withSyncretism(SyncretismMap.of(
+                                    LATIN_NOUN,
+                                    List.of(
+                                            SyncretismGroupInput.of("ae", "gen.sg", "acc.sg", "nom.pl"),
+                                            SyncretismGroupInput.of("is", "dat.pl", "abl.pl"))))));
+            ProfileBook book = ProfileBook.of(new ProfileBookInput(
+                    "latin", List.of(overclaimed), TestMaps.ordered("first-declension", "first-declension")));
+            List<Finding> findings = check(contextOf(Classes.LATIN, book, Lexicon.build("latin", List.of(PUELLA))));
+
+            assertThat(messagesFor(findings, "profiles"))
+                    .containsExactly(
+                            "first-declension revision 1 declares case=gen;number=sg and case=acc;number=sg, "
+                                    + "case=acc;number=sg and case=nom;number=pl one form, but its endings build them differently");
+            assertThat(findings)
+                    .filteredOn(finding -> finding.area().equals("profiles"))
+                    .extracting(Finding::level)
+                    .containsExactly(FindingLevel.WARNING);
+        }
+
+        @Test
+        void saysNothingAboutFormsTheEndingsBuildAlikeWithoutADeclaration() {
+            ProfileBook bare = ProfileBook.of(new ProfileBookInput(
+                    "latin",
+                    List.of(RevisionHistory.of(
+                            "first-declension",
+                            List.of(ProfileRevisionInput.of(
+                                    CivilDates.parseCivilDate("2024-09-01"), FIRST_DECLENSION)))),
+                    TestMaps.ordered("first-declension", "first-declension")));
+            assertThat(messagesFor(
+                            check(contextOf(Classes.LATIN, bare, Lexicon.build("latin", List.of(PUELLA)))), "profiles"))
+                    .isEmpty();
+        }
     }
 
     @Nested
@@ -172,6 +216,30 @@ class HealthTest {
             DrillContext context = contextOf();
             assertThat(messagesFor(check(context, withDeck(context), DAY), "decks"))
                     .contains("all holds only 3 lexemes");
+        }
+
+        @Test
+        void callsADeckAtALevelTheLanguageNeverDeclaredAnError() {
+            DrillContext context = contextOf();
+            Deck lenient = Deck.of(
+                    LATIN_NOUN,
+                    DeckInput.builder("lenient").toleranceLevel("lenient").build());
+            Deck exact = Deck.of(
+                    LATIN_NOUN,
+                    DeckInput.builder("exact").toleranceLevel("exact").build());
+            List<HealthInput.ResolvedDeck> decks = List.of(
+                    new HealthInput.ResolvedDeck(lenient, Membership.resolve(context, lenient, DAY)),
+                    new HealthInput.ResolvedDeck(exact, Membership.resolve(context, exact, DAY)));
+
+            List<Finding> errors = check(context, decks, DAY).stream()
+                    .filter(finding -> finding.level() == FindingLevel.ERROR
+                            && finding.area().equals("decks"))
+                    .toList();
+
+            assertThat(errors)
+                    .extracting(Finding::message)
+                    .containsExactly(
+                            "lenient runs at the level lenient, which latin does not declare, so no answer to it can be marked");
         }
 
         @Test

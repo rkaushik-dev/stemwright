@@ -1,6 +1,7 @@
 package io.github.rkaushikdev.stemwright.cli;
 
 import io.github.rkaushikdev.stemwright.app.Application;
+import io.github.rkaushikdev.stemwright.app.LanguageBundle;
 import io.github.rkaushikdev.stemwright.app.Loaders;
 import io.github.rkaushikdev.stemwright.domain.drill.DrillContext;
 import io.github.rkaushikdev.stemwright.domain.drill.Membership;
@@ -48,7 +49,7 @@ public final class DoctorCommand {
 
     private static String check(Application app, ParsedArgs args) {
         String language = args.requireFlag("language");
-        Loaders.requireLanguage(app.stores(), language);
+        LanguageBundle bundle = Loaders.requireLanguage(app.stores(), language);
         LocalDate on = Flags.dayFrom(app.clock(), args);
 
         DrillContext drill = app.drill().context(language);
@@ -56,7 +57,7 @@ public final class DoctorCommand {
                 .map(deck -> new ResolvedDeck(deck, Membership.resolve(drill, deck, on)))
                 .toList();
 
-        List<Finding> findings = Health.check(new HealthInput(drill, decks, on));
+        List<Finding> findings = Health.check(new HealthInput(drill, bundle.ortho(), decks, on));
         FindingCounts counts = Health.countLevels(findings);
         boolean strict = args.booleanFlag("strict");
 
