@@ -18,8 +18,13 @@ import io.github.rkaushikdev.stemwright.domain.drill.Membership;
 import io.github.rkaushikdev.stemwright.domain.lexicon.ClassRegistry;
 import io.github.rkaushikdev.stemwright.domain.lexicon.InflectionClassInput;
 import io.github.rkaushikdev.stemwright.domain.lexicon.Lexeme;
+import io.github.rkaushikdev.stemwright.domain.lexicon.LexemeContext;
+import io.github.rkaushikdev.stemwright.domain.lexicon.LexemeInput;
 import io.github.rkaushikdev.stemwright.domain.lexicon.Lexicon;
 import io.github.rkaushikdev.stemwright.domain.lexicon.PartOfSpeech;
+import io.github.rkaushikdev.stemwright.domain.lexicon.StemInput;
+import io.github.rkaushikdev.stemwright.domain.lexicon.StemSet;
+import io.github.rkaushikdev.stemwright.domain.paradigm.ParadigmSlotInput;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBook;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBookInput;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileRevisionInput;
@@ -195,6 +200,80 @@ class HealthTest {
         void notesAnEmptyLexiconRatherThanPassingItInSilence() {
             List<Finding> findings = check(contextOf(Lexicon.build("latin", List.of())));
             assertThat(messagesFor(findings, "lexicon")).contains("the lexicon is empty");
+        }
+    }
+
+    @Nested
+    class CheckOverStemRoles {
+
+        private static final LexemeContext LEXEME_CONTEXT = new LexemeContext(LATIN_NOUN, Classes.LATIN);
+
+        /** A first declension whose genitive singular is built on an oblique stem. */
+        private static final ProfileBook OBLIQUE_BOOK = ProfileBook.of(new ProfileBookInput(
+                "latin",
+                List.of(RevisionHistory.of(
+                        "first-declension",
+                        List.of(ProfileRevisionInput.of(
+                                CivilDates.parseCivilDate("2024-09-01"),
+                                FIRST_DECLENSION.withSlot(
+                                        LATIN_NOUN,
+                                        ParadigmSlotInput.builder("gen.sg")
+                                                .stemRole("oblique")
+                                                .affix("ae")
+                                                .build()))))),
+                TestMaps.ordered("first-declension", "first-declension")));
+
+        private static Lexeme noun(String lemma, StemInput... stems) {
+            return Lexeme.of(LEXEME_CONTEXT, LexemeInput.of(lemma, "first-declension", StemSet.of(stems)));
+        }
+
+        private static List<Finding> checkNouns(Lexeme... nouns) {
+            return check(contextOf(Classes.LATIN, OBLIQUE_BOOK, Lexicon.build("latin", List.of(nouns))));
+        }
+
+        @Test
+        void warnsAboutALexemeMarkedAgainstAFormBuiltOnTheWrongStem() {
+            List<Finding> findings = checkNouns(
+                    noun("rosa", StemInput.of("base", "ros")),
+                    noun("via", StemInput.of("base", "vi"), StemInput.of("oblique", "vi")));
+            assertThat(messagesFor(findings, "lexicon"))
+                    .containsExactly("1 lexemes lack a stem their profile builds on and are marked against forms"
+                            + " built on the base stem: rosa (oblique)");
+            assertThat(findings)
+                    .filteredOn(finding -> finding.area().equals("lexicon"))
+                    .extracting(Finding::level)
+                    .containsExactly(FindingLevel.WARNING);
+        }
+
+        @Test
+        void namesThreeLexemesInReadingOrderAndCountsTheRest() {
+            List<Finding> findings = checkNouns(
+                    noun("via", StemInput.of("base", "vi")),
+                    noun("aqua", StemInput.of("base", "aqu")),
+                    noun("rosa", StemInput.of("base", "ros")),
+                    noun("mensa", StemInput.of("base", "mens")),
+                    noun("terra", StemInput.of("base", "terr")));
+            assertThat(messagesFor(findings, "lexicon"))
+                    .containsExactly("5 lexemes lack a stem their profile builds on and are marked against forms"
+                            + " built on the base stem: aqua (oblique), mensa (oblique), rosa (oblique) and 2 more");
+        }
+
+        @Test
+        void saysNothingWhenTheProfileBuildsOnlyOnTheBaseStem() {
+            assertThat(messagesFor(check(contextOf()), "lexicon"))
+                    .noneMatch(message -> message.contains("lack a stem"));
+        }
+
+        @Test
+        void skipsALexemeWithNothingInForceForItsClass() {
+            List<Finding> findings = check(
+                    contextOf(
+                            Classes.LATIN,
+                            OBLIQUE_BOOK,
+                            Lexicon.build("latin", List.of(noun("rosa", StemInput.of("base", "ros"))))),
+                    List.of(),
+                    CivilDates.parseCivilDate("2024-01-01"));
+            assertThat(messagesFor(findings, "lexicon")).isEmpty();
         }
     }
 

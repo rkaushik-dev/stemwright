@@ -2,7 +2,6 @@ package io.github.rkaushikdev.stemwright.domain.report;
 
 import io.github.rkaushikdev.stemwright.domain.Grouping;
 import io.github.rkaushikdev.stemwright.domain.lexicon.ClassRegistry;
-import io.github.rkaushikdev.stemwright.domain.lexicon.Lexeme;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBook;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileRevision;
 import io.github.rkaushikdev.stemwright.domain.paradigm.RevisionHistory;
@@ -32,7 +31,6 @@ public final class Health {
 
     private static final String CLASSES = "classes";
     private static final String PROFILES = "profiles";
-    private static final String LEXICON = "lexicon";
     private static final String DECKS = "decks";
 
     /** A deck whose busiest bundle holds more than this multiple of the mean is uneven. */
@@ -53,7 +51,7 @@ public final class Health {
         List<Finding> findings = new ArrayList<>();
         checkClasses(input, findings);
         checkProfiles(input, findings);
-        checkLexemes(input, findings);
+        findings.addAll(LexiconHealth.check(input));
         checkDecks(input, findings);
         findings.sort(Comparator.comparing(Finding::level));
         return List.copyOf(findings);
@@ -114,51 +112,6 @@ public final class Health {
                     PROFILES,
                     profileKey + " revision " + revision.ordinal() + " declares " + String.join(", ", unbuilt)
                             + " one form, but its endings build them differently"));
-        }
-    }
-
-    /**
-     * A lexeme whose class is not in the registry is a stronger failure than one whose class is
-     * simply unbound: the first cannot be graded under any profile, and the second is waiting on an
-     * editorial decision that has a place to go.
-     */
-    private static void checkLexemes(HealthInput input, List<Finding> findings) {
-        ProfileBook book = input.context().book();
-        ClassRegistry classes = input.context().classes();
-        List<Lexeme> entries = input.context().lexicon().allLexemes();
-
-        List<Lexeme> missing = entries.stream()
-                .filter(entry -> classes.classOf(entry.classKey()).isEmpty())
-                .toList();
-        Grouping.countBy(missing, Lexeme::classKey)
-                .forEach((classKey, count) -> findings.add(new Finding(
-                        FindingLevel.ERROR,
-                        LEXICON,
-                        count + " lexemes name the class " + classKey + ", which the registry does not hold")));
-
-        long unbound = entries.stream()
-                .filter(entry -> classes.classOf(entry.classKey()).isPresent()
-                        && book.bindingFor(classes, entry.classKey()).isEmpty())
-                .count();
-        if (unbound > 0) {
-            findings.add(new Finding(
-                    FindingLevel.WARNING,
-                    LEXICON,
-                    unbound + " lexemes cannot be drilled because their class has no paradigm"));
-        }
-
-        long orphaned = entries.stream()
-                .filter(entry -> book.bindingFor(classes, entry.classKey())
-                        .filter(binding -> book.historyFor(binding.profileKey()).isEmpty())
-                        .isPresent())
-                .count();
-        if (orphaned > 0) {
-            findings.add(new Finding(
-                    FindingLevel.ERROR, LEXICON, orphaned + " lexemes are bound to a profile the book has lost"));
-        }
-
-        if (entries.isEmpty()) {
-            findings.add(new Finding(FindingLevel.NOTE, LEXICON, "the lexicon is empty"));
         }
     }
 
