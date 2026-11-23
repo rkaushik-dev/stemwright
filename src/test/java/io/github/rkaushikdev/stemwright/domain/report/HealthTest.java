@@ -322,6 +322,42 @@ class HealthTest {
         }
 
         @Test
+        void notesADeckThatBurialLeavesWithFarFewerQuestionsThanCells() {
+            DrillContext context = contextOf();
+            List<HealthInput.ResolvedDeck> decks = withDeck(
+                    context,
+                    DeckScopeInput.builder().classKeys("first-declension").build());
+            assertThat(messagesFor(check(context, decks, DAY), "decks"))
+                    .contains("all takes 10 cells, but burial leaves a sitting 7 of them to ask, 70 percent,"
+                            + " because the rest are twins");
+        }
+
+        @Test
+        void saysNothingAboutTwinsWhenMostOfTheDeckCanStillBeAsked() {
+            DrillContext context = contextOf();
+            assertThat(messagesFor(check(context, withDeck(context), DAY), "decks"))
+                    .noneMatch(message -> message.contains("twins"));
+        }
+
+        @Test
+        void leavesADeckWhereOnlyAFifthOfTheCellsAreTwinsAlone() {
+            DrillContext context = contextOf(Lexicon.build("latin", List.of(BELLUM)));
+            List<HealthInput.ResolvedDeck> autumn = withDeck(
+                    context,
+                    DeckScopeInput.builder().classKeys("second-declension").build());
+            LocalDate spring = CivilDates.parseCivilDate("2025-03-01");
+            Deck entry = autumn.getFirst().deck();
+            List<HealthInput.ResolvedDeck> neuterRule =
+                    List.of(new HealthInput.ResolvedDeck(entry, Membership.resolve(context, entry, spring)));
+            assertThat(messagesFor(check(context, autumn, DAY), "decks"))
+                    .noneMatch(message -> message.contains("twins"));
+            assertThat(messagesFor(check(context, neuterRule, spring), "decks"))
+                    .noneMatch(message -> message.contains("twins"));
+            assertThat(messagesFor(check(context, neuterRule, spring), "decks"))
+                    .containsExactly("all holds only 1 lexemes");
+        }
+
+        @Test
         void notesWhenNothingHasBeenDefinedAtAll() {
             assertThat(messagesFor(check(contextOf()), "decks")).containsExactly("no decks are defined");
         }

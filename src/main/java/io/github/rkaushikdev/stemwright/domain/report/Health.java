@@ -5,8 +5,6 @@ import io.github.rkaushikdev.stemwright.domain.lexicon.ClassRegistry;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileBook;
 import io.github.rkaushikdev.stemwright.domain.paradigm.ProfileRevision;
 import io.github.rkaushikdev.stemwright.domain.paradigm.RevisionHistory;
-import io.github.rkaushikdev.stemwright.domain.text.Numbers;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -31,13 +29,6 @@ public final class Health {
 
     private static final String CLASSES = "classes";
     private static final String PROFILES = "profiles";
-    private static final String DECKS = "decks";
-
-    /** A deck whose busiest bundle holds more than this multiple of the mean is uneven. */
-    private static final double UNEVEN = 2;
-
-    /** A deck of fewer lexemes than this is worth a note. */
-    private static final int FEW_LEXEMES = 5;
 
     private Health() {}
 
@@ -52,7 +43,7 @@ public final class Health {
         checkClasses(input, findings);
         checkProfiles(input, findings);
         findings.addAll(LexiconHealth.check(input));
-        checkDecks(input, findings);
+        findings.addAll(DeckHealth.check(input));
         findings.sort(Comparator.comparing(Finding::level));
         return List.copyOf(findings);
     }
@@ -112,43 +103,6 @@ public final class Health {
                     PROFILES,
                     profileKey + " revision " + revision.ordinal() + " declares " + String.join(", ", unbuilt)
                             + " one form, but its endings build them differently"));
-        }
-    }
-
-    private static void checkDecks(HealthInput input, List<Finding> findings) {
-        LocalDate on = input.on();
-        for (HealthInput.ResolvedDeck resolved : input.decks()) {
-            String deckKey = resolved.deck().key();
-            resolved.deck()
-                    .toleranceLevel()
-                    .filter(level -> input.ortho().levelOf(level).isEmpty())
-                    .ifPresent(level -> findings.add(new Finding(
-                            FindingLevel.ERROR,
-                            DECKS,
-                            deckKey + " runs at the level " + level + ", which "
-                                    + input.ortho().language()
-                                    + " does not declare, so no answer to it can be marked")));
-            DeckStats stats = DeckStats.of(resolved.deck(), resolved.membership(), List.of());
-            if (stats.cells() == 0) {
-                findings.add(new Finding(FindingLevel.ERROR, DECKS, deckKey + " selects nothing on " + on));
-                continue;
-            }
-            double imbalance = stats.bundleImbalance();
-            if (imbalance > UNEVEN) {
-                findings.add(new Finding(
-                        FindingLevel.WARNING,
-                        DECKS,
-                        deckKey + " is uneven, its busiest bundle holds " + Numbers.toFixed(imbalance, 1)
-                                + " times the average"));
-            }
-            if (stats.lexemes() < FEW_LEXEMES) {
-                findings.add(
-                        new Finding(FindingLevel.NOTE, DECKS, deckKey + " holds only " + stats.lexemes() + " lexemes"));
-            }
-        }
-
-        if (input.decks().isEmpty()) {
-            findings.add(new Finding(FindingLevel.NOTE, DECKS, "no decks are defined"));
         }
     }
 
