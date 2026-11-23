@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.rkaushikdev.stemwright.app.Application;
 import io.github.rkaushikdev.stemwright.app.ApplicationOptions;
 import io.github.rkaushikdev.stemwright.app.Stores;
+import io.github.rkaushikdev.stemwright.domain.text.Text;
 import io.github.rkaushikdev.stemwright.support.App;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -80,6 +81,30 @@ class ImportCommandTest {
             RunResult result = run(build().program(), "import", "--language", "latin", "--file", file);
             assertThat(result.output()).contains("Already in the lexicon");
             assertThat(result.output()).contains("puella");
+            assertThat(Text.split(result.output(), "\n")).contains("What it would change", "  nothing changed");
+        }
+
+        @Test
+        void saysFieldByFieldWhatItWouldChangeInAStoredLexeme() throws IOException {
+            String file = freshFile(
+                    "words.csv",
+                    HEADER + "\npuella,first-declension,puell,maiden,core\nnauta,first-declension,naut,sailor,core\n");
+            List<String> lines = Text.split(
+                    run(build().program(), "import", "--language", "latin", "--file", file)
+                            .output(),
+                    "\n");
+            int at = lines.indexOf("What it would change");
+            assertThat(lines.subList(at + 1, at + 3))
+                    .containsExactly(
+                            "  1 added, 0 removed, 1 changed, 1 of which move a schedule",
+                            "  changed puella: glosses from girl to maiden");
+        }
+
+        @Test
+        void neverReportsAStoredLexemeTheFileLeavesOutAsRemoved() throws IOException {
+            String file = freshFile("words.csv", GOOD);
+            RunResult result = run(build().program(), "import", "--language", "latin", "--file", file);
+            assertThat(result.output()).contains("  2 added, 0 removed, 0 changed");
         }
     }
 
@@ -110,8 +135,25 @@ class ImportCommandTest {
             Built built = build();
             String file = freshFile("words.csv", GOOD);
             run(built.program(), "import", "--language", "latin", "--file", file, "--apply");
-            run(built.program(), "import", "--language", "latin", "--file", file, "--apply");
+            RunResult again = run(built.program(), "import", "--language", "latin", "--file", file, "--apply");
             assertThat(built.stores().lexemes().listByLanguage("latin")).hasSize(6);
+            assertThat(again.output()).contains("Wrote 0 lexemes to latin, 2 already stored as written.");
+        }
+
+        @Test
+        void replacesAStoredLexemeTheFileChangesAndLeavesTheRestAlone() throws IOException {
+            Built built = build();
+            String file = freshFile(
+                    "words.csv",
+                    HEADER
+                            + "\npuella,first-declension,puell,maiden,core\nbellum,second-declension.neuter,bell,war,core\n");
+            RunResult result = run(built.program(), "import", "--language", "latin", "--file", file, "--apply");
+            assertThat(result.output()).contains("Wrote 1 lexeme to latin, 1 already stored as written.");
+            assertThat(result.output()).contains("changed puella: glosses from girl to maiden");
+            assertThat(result.output()).doesNotContain("changed bellum");
+            assertThat(built.stores().lexemes().listByLanguage("latin"))
+                    .hasSize(4)
+                    .anySatisfy(entry -> assertThat(entry.glosses()).containsExactly("maiden"));
         }
     }
 
